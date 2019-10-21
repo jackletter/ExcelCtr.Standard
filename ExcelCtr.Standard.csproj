@@ -2,6 +2,13 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
+    <Description>Excel导入导出工具,基于NPOI,支持dataset/datatable/list直接导出到excel并提供模板控制</Description>
+    <PackageProjectUrl>https://github.com/jackletter/ExcelCtr.Standard</PackageProjectUrl>
+    <Authors>jackletter</Authors>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <DocumentationFile>E:\jackletter\github\ExcelCtr.Standard\ExcelCtr.Standard.xml</DocumentationFile>
   </PropertyGroup>
 
   <ItemGroup>
