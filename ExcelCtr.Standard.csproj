@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="DBUtil.Standard" Version="1.0.0" />
+    <PackageReference Include="ImageCode.Standard" Version="1.0.0" />
+    <PackageReference Include="NPOI" Version="2.4.1" />
+  </ItemGroup>
+
+</Project>
