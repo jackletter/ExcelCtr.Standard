@@ -11,6 +11,7 @@ using System.IO;
 using System.Data;
 using System.Data.Common;
 using System.Collections;
+using System.Text;
 
 namespace ExcelCtr
 {
@@ -19,6 +20,10 @@ namespace ExcelCtr
     /// </summary>
     public class ExcelOP
     {
+        static ExcelOP()
+        {
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        }
         #region 读取excel
         /// <summary>将excel中的每一个表第一行为列名组合读取成一个dataset</summary>
         /// <param name="filePath"></param>

@@ -15,6 +15,7 @@
     <PackageReference Include="DBUtil.Standard" Version="1.0.0" />
     <PackageReference Include="ImageCode.Standard" Version="1.0.0" />
     <PackageReference Include="NPOI" Version="2.4.1" />
+    <PackageReference Include="System.Text.Encoding.CodePages" Version="4.6.0" />
   </ItemGroup>
 
 </Project>
