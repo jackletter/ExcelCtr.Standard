@@ -4,11 +4,14 @@
         <name>ExcelCtr.Standard</name>
     </assembly>
     <members>
-        <member name="M:ExcelCtr.ExcelHelper.ExportDS(System.Data.DataSet,System.Collections.Generic.List{System.String},System.Collections.Generic.List{System.String})">
-            <summary>DataSet导出到Excel的MemoryStream</summary>
+        <member name="M:ExcelCtr.ExcelHelper.ExportDS(System.Data.DataSet,System.Collections.Generic.List{System.String},System.Collections.Generic.List{System.String},ExcelCtr.EnumExcelType)">
+            <summary>
+            DataSet导出到Excel的MemoryStream
+            </summary>
             <param name="ds">源DataSet</param>
             <param name="strHeaderTexts">表格头文本值集合</param>
             <param name="sheetCombineColIndexs">每个表格的要垂直合并的列的序号如：{"0,1","2"}表示表1的第0和1列进行合并,表2的第2列进行合并</param>
+            <param name="enumExcelType">excel格式</param>
             <returns></returns>
         </member>
         <member name="M:ExcelCtr.ExcelHelper.ImportExceltoDs(System.String)">
@@ -59,7 +62,7 @@
         </member>
         <member name="M:ExcelCtr.ExcelHelper.ImportExceltoDs(System.String,System.Collections.Generic.List{System.Int32},System.Collections.Generic.List{System.Boolean},System.Collections.Generic.List{System.Int32[]})">
             <summary>从指定流中读取excel中指定表是否有列头行,和列投行的位置或者数据内容的起始行索引和列索引</summary>
-            <param name="filePath">文件路径</param>
+            <param name="strFileName">文件名称</param>
             <param name="sheetIndexs">sheet索引集合</param>
             <param name="hasColNames">每个sheet是否列头行的布尔说明</param>
             <param name="dataStartIndex">每个sheet的列头行号或者是数据内容起始的起始行索引或者是起始列索引</param>
@@ -75,7 +78,7 @@
         </member>
         <member name="M:ExcelCtr.ExcelHelper.ImportExceltoDs(System.String,System.Collections.Generic.List{System.String},System.Collections.Generic.List{System.Boolean},System.Collections.Generic.List{System.Int32[]})">
             <summary>从指定流中读取excel中指定表是否有列头行,和列投行的位置或者数据内容的起始行索引和列索引</summary>
-            <param name="filePath">文件路径</param>
+            <param name="strFileName">文件名称</param>
             <param name="sheetNames">sheet名字集合</param>
             <param name="hasColNames">每个sheet是否列头行的布尔说明</param>
             <param name="dataStartIndex">每个sheet的列头行号或者是数据内容起始的起始行索引或者是起始列索引</param>
@@ -112,7 +115,27 @@
             <param name="sheet">要插入行的sheet</param>
             <param name="startindex">从这一行的前面插入(这一行开始包括这一行都会被整体向下移动rowcount)</param>
             <param name="rowcount">插入的行数</param>
-            <param name="stylerow">被插入行采用的样式行的索引,注意这个索引行所在的位置应该位于插入起始行之上</param>
+            <param name="styleindex">被插入行采用的样式行的索引,注意这个索引行所在的位置应该位于插入起始行之上</param>
+        </member>
+        <member name="T:ExcelCtr.Entry">
+            <summary>
+            用于合并垂直单元格时的实体类
+            </summary>
+        </member>
+        <member name="T:ExcelCtr.EnumExcelType">
+            <summary>
+            excel文件格式
+            </summary>
+        </member>
+        <member name="F:ExcelCtr.EnumExcelType.office2003">
+            <summary>
+            微软97-2003格式,存储为二进制
+            </summary>
+        </member>
+        <member name="F:ExcelCtr.EnumExcelType.openxml">
+            <summary>
+            openxml标准格式,存储的是一系列xml等文件的压缩包
+            </summary>
         </member>
         <member name="T:ExcelCtr.ExcelOP">
             <summary>
@@ -120,158 +143,216 @@
             </summary>
         </member>
         <member name="M:ExcelCtr.ExcelOP.Read(System.String)">
-            <summary>将excel中的每一个表第一行为列名组合读取成一个dataset</summary>
-            <param name="filePath"></param>
+            <summary>
+            将excel中的每一个表第一行为列名组合读取成一个dataset
+            </summary>
+            <param name="filePath">excel文件路径</param>
             <returns></returns>
         </member>
         <member name="M:ExcelCtr.ExcelOP.Read(System.IO.Stream)">
-            <summary>将excel中的每一个表第一行为列名组合读取成一个dataset</summary>
-            <param name="stream"></param>
+            <summary>
+            将excel中的每一个表第一行为列名组合读取成一个dataset
+            </summary>
+            <param name="stream">excel文件流</param>
             <returns></returns>
         </member>
         <member name="M:ExcelCtr.ExcelOP.Read(System.String,System.Collections.Generic.List{System.String},System.Collections.Generic.List{System.Int32})">
-            <summary>读取excel中指定表名和指定相应列头行的表</summary>
-            <param name="strFileName"></param>
-            <param name="sheetNames"></param>
-            <param name="indexOfColNames"></param>
+            <summary>
+            读取excel中指定表名和指定相应列头所在索引行的表
+            <para>如:Read("c:\test.xls",new List&lt;string&gt;() { "Sheet1", "Sheet2" },new List&lt;int&gt;() { 1, 1 })</para>
+            </summary>
+            <param name="filePath">excel文件路径</param>
+            <param name="sheetNames">excel中的sheet名称列表</param>
+            <param name="indexOfColNames">每个sheet对应的列头所在的行索引集合</param>
             <returns></returns>
         </member>
         <member name="M:ExcelCtr.ExcelOP.Read(System.IO.Stream,System.Collections.Generic.List{System.String},System.Collections.Generic.List{System.Int32})">
-            <summary>读取excel中指定表名和指定相应列头行的表</summary>
-            <param name="stream"></param>
-            <param name="sheetNames"></param>
-            <param name="indexOfColNames"></param>
+            <summary>
+            读取excel中指定Sheet名的Sheet,并且指定每个Sheet的列头所在的行索引
+            <para>如:Read(stream,new List&lt;string&gt;() { "Sheet1", "Sheet2" },new List&lt;int&gt;() { 1, 1 })</para>
+            </summary>
+            <param name="stream">excel文件流</param>
+            <param name="sheetNames">excel中的sheet名称列表</param>
+            <param name="indexOfColNames">每个sheet对应的列头所在的行索引集合</param>
             <returns></returns>
         </member>
         <member name="M:ExcelCtr.ExcelOP.Read(System.String,System.Collections.Generic.List{System.Int32},System.Collections.Generic.List{System.Int32})">
-            <summary>读取excel中指定表索引和相应列头行的表</summary>
-            <param name="strFileName"></param>
-            <param name="sheetIndexs"></param>
-            <param name="indexOfColNames"></param>
+            <summary>
+            读取excel中指定Sheet索引的Sheet,并且指定每个Sheet的列头所在的行索引
+            <para>如:Read("c:\test.xls",new List&lt;int&gt;() { 0, 1 },new List&lt;int&gt;() { 1, 1 })</para>
+            </summary>
+            <param name="filePath">excel文件路径</param>
+            <param name="sheetIndexs">excel中的sheet索引列表</param>
+            <param name="indexOfColNames">每个sheet对应的列头所在的行索引集合</param>
             <returns></returns>
         </member>
         <member name="M:ExcelCtr.ExcelOP.Read(System.IO.Stream,System.Collections.Generic.List{System.Int32},System.Collections.Generic.List{System.Int32})">
-            <summary>读取excel中指定表索引和相应列头行的表</summary>
-            <param name="stream"></param>
-            <param name="sheetIndexs"></param>
-            <param name="indexOfColNames"></param>
+            <summary>
+            读取excel中指定索引的Sheet,并且指明每个Sheet列头的行索引
+            <para>如:Read(stream,new List&lt;int&gt;() { 0, 1 },new List&lt;int&gt;() { 1, 1 })</para>
+            </summary>
+            <param name="stream">excel文件流</param>
+            <param name="sheetIndexs">excel中的sheet索引列表</param>
+            <param name="indexOfColNames">每个sheet对应的列头所在的行索引集合</param>
             <returns></returns>
         </member>
         <member name="M:ExcelCtr.ExcelOP.Read(System.String,System.Collections.Generic.List{System.Int32},System.Collections.Generic.List{System.Boolean},System.Collections.Generic.List{System.Int32[]})">
-            <summary>读取excel中指定表索引以及是否有列头行的读取数据情况</summary>
-            <param name="filePath"></param>
-            <param name="sheetIndexs"></param>
-            <param name="hasColNames"></param>
-            <param name="dataStartIndex"></param>
+            <summary>
+            读取excel中指定索引的Sheet,并且指明每个Sheet是否有列头以及列头和数据的行索引
+            <para>如:Read("c:\test.xls",new List&lt;int&gt;() { 0, 1 },new List&lt;bool&gt;() { true, true }, new List&lt;int[]&gt;() { new int[] { 0, 0 }, new int[] { 0,0} })</para>
+            </summary>
+            <param name="filePath">excel文件路径</param>
+            <param name="sheetIndexs">excel中的sheet索引列表</param>
+            <param name="hasColNames">每个sheet是否列头行的布尔说明</param>
+            <param name="dataStartIndex">每个sheet的列头行号和数据内容起始的起始行索引</param>
             <returns></returns>
         </member>
         <member name="M:ExcelCtr.ExcelOP.Read(System.IO.Stream,System.Collections.Generic.List{System.Int32},System.Collections.Generic.List{System.Boolean},System.Collections.Generic.List{System.Int32[]})">
-            <summary>读取excel中指定表索引以及是否有列头行的读取数据情况</summary>
-            <param name="stream"></param>
-            <param name="sheetIndexs"></param>
-            <param name="hasColNames"></param>
-            <param name="dataStartIndex"></param>
+            <summary>
+            读取excel中指定索引的Sheet,并且指明每个Sheet是否有列头以及列头和数据的行索引
+            <para>如:Read(stream,new List&lt;int&gt;() { 0, 1 },new List&lt;bool&gt;() { true, true }, new List&lt;int[]&gt;() { new int[] { 0, 0 }, new int[] { 0,0} })</para>
+            </summary>
+            <param name="stream">excel文件流</param>
+            <param name="sheetIndexs">excel中的sheet索引列表</param>
+            <param name="hasColNames">每个sheet是否列头行的布尔说明</param>
+            <param name="dataStartIndex">每个sheet的列头行号和数据内容起始的起始行索引</param>
             <returns></returns>
         </member>
         <member name="M:ExcelCtr.ExcelOP.Read(System.String,System.Collections.Generic.List{System.String},System.Collections.Generic.List{System.Boolean},System.Collections.Generic.List{System.Int32[]})">
-            <summary>读取excel中指定表名以及是否有列头行的读取数据情况</summary>
-            <param name="filePath"></param>
-            <param name="sheetNames"></param>
-            <param name="hasColNames"></param>
-            <param name="dataStartIndex"></param>
+            <summary>
+            读取excel中指定Sheet名的Sheet,并且指明每个Sheet是否有列头以及列头和数据的行索引
+            <para>如:Read("c:\test.xls",new List&lt;string&gt;() { "Sheet1", "Sheet2" },new List&lt;bool&gt;() { true, true }, new List&lt;int[]&gt;() { new int[] { 0, 0 }, new int[] { 0,0} })</para>
+            </summary>
+            <param name="filePath">excel文件路径</param>
+            <param name="sheetNames">excel中的sheet名称列表</param>
+            <param name="hasColNames">每个sheet是否列头行的布尔说明</param>
+            <param name="dataStartIndex">每个sheet的列头行号和数据内容起始的起始行索引</param>
             <returns></returns>
         </member>
         <member name="M:ExcelCtr.ExcelOP.Read(System.IO.Stream,System.Collections.Generic.List{System.String},System.Collections.Generic.List{System.Boolean},System.Collections.Generic.List{System.Int32[]})">
-            <summary>读取excel中指定表名以及是否有列头行的读取数据情况</summary>
-            <param name="stream"></param>
-            <param name="sheetNames"></param>
-            <param name="hasColNames"></param>
-            <param name="dataStartIndex"></param>
+            <summary>
+            读取excel中指定Sheet名的Sheet,并且指明每个Sheet是否有列头以及列头和数据的行索引
+            <para>如:Read(stream,new List&lt;string&gt;() { "Sheet1", "Sheet2" },new List&lt;bool&gt;() { true, true }, new List&lt;int[]&gt;() { new int[] { 0, 0 }, new int[] { 0,0} })</para>
+            </summary>
+            <param name="stream">excel文件流</param>
+            <param name="sheetNames">excel中的sheet名称列表</param>
+            <param name="hasColNames">每个sheet是否列头行的布尔说明</param>
+            <param name="dataStartIndex">每个sheet的列头行号和数据内容起始的起始行索引</param>
             <returns></returns>
         </member>
         <member name="M:ExcelCtr.ExcelOP.Write(System.String,System.Data.DataSet)">
-            <summary>将ds数据写入excel文件中</summary>
+            <summary>
+            将ds数据写入excel文件中
+            </summary>
             <param name="filePath">生成excel文件的路径</param>
             <param name="ds">生成使用的数据集</param>
         </member>
         <member name="M:ExcelCtr.ExcelOP.Write(System.String,System.Data.DataSet,System.Collections.Generic.List{System.String})">
-            <summary>将ds数据写入excel文件中</summary>
+            <summary>
+            将ds数据写入excel文件中
+            </summary>
             <param name="filePath">生成excel文件的路径</param>
             <param name="ds">生成使用的数据集</param>
             <param name="SheetHeaders">每个sheet的表头集合(顺序和ds的table对应)</param>
         </member>
-        <member name="M:ExcelCtr.ExcelOP.Write(System.IO.FileStream,System.Data.DataSet)">
-            <summary>将ds数据写入文件流中</summary>
+        <member name="M:ExcelCtr.ExcelOP.Write(System.IO.FileStream,System.Data.DataSet,ExcelCtr.EnumExcelType)">
+            <summary>
+            将ds数据写入文件流中
+            </summary>
             <param name="fs">目的文件流</param>
             <param name="ds">生成使用的数据集</param>
+            <param name="enumExcelType">excel文件格式</param>
         </member>
-        <member name="M:ExcelCtr.ExcelOP.Write(System.IO.FileStream,System.Data.DataSet,System.Collections.Generic.List{System.String})">
-            <summary>将ds数据写入文件流中</summary>
+        <member name="M:ExcelCtr.ExcelOP.Write(System.IO.FileStream,System.Data.DataSet,System.Collections.Generic.List{System.String},ExcelCtr.EnumExcelType)">
+            <summary>
+            将ds数据写入文件流中
+            </summary>
             <param name="fs">目的文件流</param>
             <param name="ds">生成使用的数据集</param>
             <param name="SheetHeaders">每个sheet的表头集合(顺序和ds的table对应)</param>
+            <param name="enumExcelType">excel文件格式</param>
         </member>
-        <member name="M:ExcelCtr.ExcelOP.Write(System.IO.FileStream,System.Data.DataSet,System.Collections.Generic.List{System.String},System.Collections.Generic.List{System.String})">
-            <summary>将ds数据写入文件流中并指定合并行信息</summary>
+        <member name="M:ExcelCtr.ExcelOP.Write(System.IO.FileStream,System.Data.DataSet,System.Collections.Generic.List{System.String},System.Collections.Generic.List{System.String},ExcelCtr.EnumExcelType)">
+            <summary>
+            将ds数据写入文件流中并指定合并行信息
+            </summary>
             <param name="fs">目的文件流</param>
             <param name="ds">生成使用的数据集</param>
             <param name="SheetHeaders">每个sheet的表头集合(顺序和ds的table对应)</param>
             <param name="combineColIndexs">要进行纵向合并的列索引集合</param>
+            <param name="enumExcelType">excel文件格式</param>
         </member>
         <member name="M:ExcelCtr.ExcelOP.Write(System.String,System.Data.DataSet,System.Collections.Generic.List{System.String},System.Collections.Generic.List{System.String})">
-            <summary>将ds数据写入excel文件中并指定合并行信息</summary>
+            <summary>
+            将ds数据写入excel文件中并指定合并行信息
+            </summary>
             <param name="filePath">生成excel文件的路径</param>
             <param name="ds">生成使用的数据集</param>
             <param name="SheetHeaders">每个sheet的表头集合(顺序和ds的table对应)</param>
             <param name="combineColIndexs">要进行纵向合并的列索引集合</param>
         </member>
         <member name="M:ExcelCtr.ExcelOP.WriteWithTemplate(System.Collections.Hashtable,System.String,System.String)">
-            <summary>根据模板导出excel</summary>
+            <summary>
+            根据模板导出excel
+            </summary>
             <param name="ht">传进去的参数</param>
-            <param name="templatePath">模板配置文件的绝对路径,后缀名为.xml,注意仅支持97-2003格式Excel</param>
+            <param name="templateConfPath">模板配置文件的绝对路径,后缀名为.xml,注意仅支持97-2003格式Excel</param>
+            <param name="destfilepath">生成的Excel路径</param>
         </member>
         <member name="M:ExcelCtr.ExcelTemplateOP.#ctor(System.String,System.Collections.Hashtable)">
-            <summary>使用配置文件和哈希表(携带参数)初始化</summary>
-            <param name="confPath">配置文件的绝对路径,以.xml结尾如:d:\demo.xml</param>
+            <summary>
+            使用配置文件和哈希表(携带参数)初始化
+            </summary>
+            <param name="templateConfPath">配置文件的绝对路径,以.xml结尾如:d:\demo.xml</param>
             <param name="ht">携带的参数</param>
         </member>
         <member name="M:ExcelCtr.ExcelTemplateOP.PrepareData(System.Collections.Hashtable)">
-            <summary>初始化配置文件</summary>
+            <summary>
+            初始化配置文件
+            </summary>
             <param name="ht">初始化配置携带的参数</param>
         </member>
         <member name="M:ExcelCtr.ExcelTemplateOP.ReadConf(System.String)">
-            <summary>读取配置文件</summary>
+            <summary>
+            读取配置文件
+            </summary>
             <param name="confPath"></param>
         </member>
         <member name="M:ExcelCtr.ExcelTemplateOP.Write(System.String)">
-            <summary>将结果写入excel文件</summary>
-            <param name="filePath"></param>
+            <summary>
+            将结果写入excel文件
+            </summary>
+            <param name="destfilepath">生成的excel文件路径</param>
         </member>
         <member name="M:ExcelCtr.ExcelTemplateOP.ParseVal(System.String)">
-            <summary>解析值coltmp和pic\from的属性value的实际值
+            <summary>
+            解析值coltmp和pic\from的属性value的实际值
             </summary>
             <param name="colval">如:qwe#parameters.caseno#hjk</param>
             <returns></returns>
         </member>
         <member name="M:ExcelCtr.ExcelTemplateOP.ParseCycleVal(System.String[],System.Data.DataTable,System.Int32)">
-            <summary>解析循环行配置列的属性value的实际值,以及控制合并的值
+            <summary>
+            解析循环行配置列的属性value的实际值,以及控制合并的值
             </summary>
-            <param name="colval">如:qwe#parameters.caseno#hjk或#binddt.YueFen#月</param>
             <param name="curdt">循环行绑定的表</param>
             <param name="arr">模板列的配置数组</param>
             <param name="i">数据表curdt进行到的行索引</param>
             <returns></returns>
         </member>
         <member name="F:ExcelCtr.ExcelTemplateOP.ht_colmap">
-            <summary>存储列索引映射
+            <summary>
+            存储列索引映射
             </summary>
         </member>
         <member name="M:ExcelCtr.ExcelTemplateOP.#cctor">
-            <summary>静态代码块,初始化列索引映射
+            <summary>
+            静态代码块,初始化列索引映射
             </summary>
         </member>
         <member name="M:ExcelCtr.ExcelTemplateOP.GetColIndex(System.String)">
-            <summary>获取列的真正索引(0-based)
+            <summary>
+            获取列的真正索引(0-based)
             </summary>
             <param name="colindex">配置中的索引如:A(返回0)或AB(返回26)</param>
             <returns></returns>

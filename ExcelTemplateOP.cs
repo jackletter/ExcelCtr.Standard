@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Linq.Expressions;
 using System.Text;
 using DBUtil;
 using System.Collections;
@@ -9,31 +8,40 @@ using System.Xml;
 using System.Data;
 using System.Reflection;
 
-using NPOI.SS;
-using NPOI.HSSF;
-using NPOI;
 using NPOI.HSSF.UserModel;
 using System.IO;
 using NPOI.SS.UserModel;
 
 using System.Text.RegularExpressions;
 using ImageCode;
+using NPOI.XSSF.UserModel;
+using System.Drawing;
+using NPOI.SS.Util;
+using NPOI.OpenXmlFormats.Dml;
 
 namespace ExcelCtr
 {
     internal class ExcelTemplateOP
     {
-        /// <summary>使用配置文件和哈希表(携带参数)初始化</summary>
-        /// <param name="confPath">配置文件的绝对路径,以.xml结尾如:d:\demo.xml</param>
+        /// <summary>
+        /// 使用配置文件和哈希表(携带参数)初始化
+        /// </summary>
+        /// <param name="templateConfPath">配置文件的绝对路径,以.xml结尾如:d:\demo.xml</param>
         /// <param name="ht">携带的参数</param>
         public ExcelTemplateOP(string templateConfPath, Hashtable ht)
         {
-            this.templatePath = templateConfPath.Substring(0, templateConfPath.LastIndexOf('.')) + ".xls";
+            this.templatePath = templateConfPath.Substring(0, templateConfPath.LastIndexOf('.')) + ".xlsx";
+            if (!File.Exists(templatePath))
+            {
+                this.templatePath = templateConfPath.Substring(0, templateConfPath.LastIndexOf('.')) + ".xls";
+            }
             ReadConf(templateConfPath);
             PrepareData(ht);
         }
 
-        /// <summary>初始化配置文件</summary>
+        /// <summary>
+        /// 初始化配置文件
+        /// </summary>
         /// <param name="ht">初始化配置携带的参数</param>
         private void PrepareData(Hashtable ht)
         {
@@ -317,7 +325,9 @@ namespace ExcelCtr
             });
         }
 
-        /// <summary>读取配置文件</summary>
+        /// <summary>
+        /// 读取配置文件
+        /// </summary>
         /// <param name="confPath"></param>
         private void ReadConf(string confPath)
         {
@@ -465,8 +475,13 @@ namespace ExcelCtr
             });
         }
 
-        /// <summary>将结果写入excel文件</summary>
-        /// <param name="filePath"></param>
+        /// <summary>
+        /// 将结果写入excel文件
+        /// <para>
+        /// 注意：xlsx格式的模板中输出图片可能会发生变形,将excel模板的默认字体改为Calibri 11pt即可(或者使用xls输出)
+        /// </para>
+        /// </summary>
+        /// <param name="destfilepath">生成的excel文件路径</param>
         public void Write(string destfilepath)
         {
             if (sheets == null && fastsheets == null) throw new Exception("模板文件【" + templatePath.Substring(0, templatePath.LastIndexOf('.')) + ".xml" + "】缺少sheets节点或fastsheets节点");
@@ -564,7 +579,9 @@ namespace ExcelCtr
 
                 //输出
                 FileStream fs = new FileStream(destfilepath, FileMode.Create);
-                MemoryStream stream = ExcelHelper.ExportDS(ds, SheetHeaders, combineColIndexs);
+                EnumExcelType type = EnumExcelType.office2003;
+                if (destfilepath.EndsWith(".xlsx")) type = EnumExcelType.openxml;
+                MemoryStream stream = ExcelHelper.ExportDS(ds, SheetHeaders, combineColIndexs, type);
                 byte[] bs = stream.ToArray();
                 fs.Write(bs, 0, bs.Length);
                 fs.Flush();
@@ -575,7 +592,15 @@ namespace ExcelCtr
             {
                 #region 不存在fastsheets节点的情况下解析sheets节点
                 FileStream file = new FileStream(this.templatePath, FileMode.Open, FileAccess.Read);
-                HSSFWorkbook book = new HSSFWorkbook(file);
+                IWorkbook book = null;
+                if (this.templatePath.EndsWith(".xlsx"))
+                {
+                    book = new XSSFWorkbook(file);
+                }
+                else
+                {
+                    book = new HSSFWorkbook(file);
+                }
                 //解析sheets
                 sheets.OfType<XmlElement>()
                     .Where<XmlElement>(i => i.Name == "sheet")
@@ -663,7 +688,12 @@ namespace ExcelCtr
                                                         res = res.Replace("\\r", "\r")
                                                             .Replace("\\n", "\n")
                                                             .Replace("\\t", "\t");
-                                                        cell.SetCellValue(new HSSFRichTextString(res));
+                                                        IRichTextString text = new HSSFRichTextString(res);
+                                                        if (book is XSSFWorkbook)
+                                                        {
+                                                            text = new XSSFRichTextString(res);
+                                                        }
+                                                        cell.SetCellValue(text);
                                                     }
                                                 }
 
@@ -803,7 +833,13 @@ namespace ExcelCtr
                                                         res[0] = res[0].Replace("\\r", "\r")
                                                             .Replace("\\n", "\n")
                                                             .Replace("\\t", "\t");
-                                                        cell.SetCellValue(new HSSFRichTextString(res[0]));
+                                                        IRichTextString text = new HSSFRichTextString(res[0]);
+                                                        if (book is XSSFWorkbook)
+                                                        {
+                                                            text = new XSSFRichTextString(res[0]);
+                                                        }
+                                                        cell.SetCellValue(text);
+                                                        cell.SetCellValue(text);
                                                     }
                                                     //如果存在控制合并键值,就进行预合并处理
                                                     if (arr[2] != "")
@@ -942,10 +978,18 @@ namespace ExcelCtr
                                     int offy = int.Parse(start.GetAttribute("offy"));
                                     //将图片数据装载到book中
                                     int picindex = book.AddPicture(bytes, PictureType.PNG);
-
-                                    HSSFPatriarch patriarch = (HSSFPatriarch)isheet.CreateDrawingPatriarch();
-                                    HSSFClientAnchor anchor = new HSSFClientAnchor(offx, offy, 0, 0, col, row, col, row);
-                                    HSSFPicture pict = (HSSFPicture)patriarch.CreatePicture(anchor, picindex);
+                                    IDrawing patriarch = isheet.CreateDrawingPatriarch();
+                                    IClientAnchor anchor = null;
+                                    if (book is HSSFWorkbook)
+                                    {
+                                        anchor = new HSSFClientAnchor(offx, offy, 0, 0, col, row, col, row);
+                                    }
+                                    else
+                                    {
+                                        //注意需要设置excel模板的默认字体为Calibri 11pt，否则会出现变形,或者是不使用xlsx这种格式
+                                        anchor = new XSSFClientAnchor(offx, offy, 0, 0, col, row, col, row);
+                                    }
+                                    IPicture pict = patriarch.CreatePicture(anchor, picindex);
                                     pict.Resize();//设置图片按照原来的大小计算
                                 }
                                 else
@@ -964,7 +1008,8 @@ namespace ExcelCtr
             }
         }
 
-        /// <summary>解析值coltmp和pic\from的属性value的实际值
+        /// <summary>
+        /// 解析值coltmp和pic\from的属性value的实际值
         /// </summary>
         /// <param name="colval">如:qwe#parameters.caseno#hjk</param>
         /// <returns></returns>
@@ -1018,9 +1063,9 @@ namespace ExcelCtr
             return res;
         }
 
-        /// <summary>解析循环行配置列的属性value的实际值,以及控制合并的值
+        /// <summary>
+        /// 解析循环行配置列的属性value的实际值,以及控制合并的值
         /// </summary>
-        /// <param name="colval">如:qwe#parameters.caseno#hjk或#binddt.YueFen#月</param>
         /// <param name="curdt">循环行绑定的表</param>
         /// <param name="arr">模板列的配置数组</param>
         /// <param name="i">数据表curdt进行到的行索引</param>
@@ -1091,11 +1136,13 @@ namespace ExcelCtr
             return res;
         }
 
-        /// <summary>存储列索引映射
+        /// <summary>
+        /// 存储列索引映射
         /// </summary>
         private static Hashtable ht_colmap = new Hashtable();
 
-        /// <summary>静态代码块,初始化列索引映射
+        /// <summary>
+        /// 静态代码块,初始化列索引映射
         /// </summary>
         static ExcelTemplateOP()
         {
@@ -1127,7 +1174,8 @@ namespace ExcelCtr
             ht_colmap.Add('Z', 26); ht_colmap.Add('z', 26);
         }
 
-        /// <summary>获取列的真正索引(0-based)
+        /// <summary>
+        /// 获取列的真正索引(0-based)
         /// </summary>
         /// <param name="colindex">配置中的索引如:A(返回0)或AB(返回26)</param>
         /// <returns></returns>

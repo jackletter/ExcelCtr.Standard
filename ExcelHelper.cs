@@ -20,6 +20,8 @@ using System.Collections;
 using System.Text.RegularExpressions;
 using NPOI.XSSF;
 using NPOI.XSSF.UserModel;
+using NPOI.OpenXmlFormats.Spreadsheet;
+using System.Reflection;
 
 namespace ExcelCtr
 {
@@ -27,25 +29,33 @@ namespace ExcelCtr
     {
         #region 导出excel
 
-        /// <summary>DataSet导出到Excel的MemoryStream</summary>
+        /// <summary>
+        /// DataSet导出到Excel的MemoryStream
+        /// </summary>
         /// <param name="ds">源DataSet</param>
         /// <param name="strHeaderTexts">表格头文本值集合</param>
         /// <param name="sheetCombineColIndexs">每个表格的要垂直合并的列的序号如：{"0,1","2"}表示表1的第0和1列进行合并,表2的第2列进行合并</param>
+        /// <param name="enumExcelType">excel格式</param>
         /// <returns></returns>
-        public static MemoryStream ExportDS(DataSet ds, List<string> strHeaderTexts, List<string> sheetCombineColIndexs)
+        public static MemoryStream ExportDS(DataSet ds, List<string> strHeaderTexts, List<string> sheetCombineColIndexs, EnumExcelType enumExcelType)
         {
-            HSSFWorkbook workbook = new HSSFWorkbook();
-            HSSFSheet sheet = null;
+            IWorkbook workbook = new HSSFWorkbook();
+            if (enumExcelType == EnumExcelType.openxml)
+            {
+                workbook = new XSSFWorkbook();
+            }
+            ISheet sheet = null;
             //自动换行单元格样式
             ICellStyle cellStyle_crlf = workbook.CreateCellStyle();
             cellStyle_crlf.WrapText = true;
 
-            #region 右击文件 属性信息
-
+            #region 右击文件 属性信息(2003格式)
+            if (workbook is HSSFWorkbook)
             {
                 DocumentSummaryInformation dsi = PropertySetFactory.CreateDocumentSummaryInformation();
                 dsi.Company = "http://www.jack.com/";
-                workbook.DocumentSummaryInformation = dsi;
+                HSSFWorkbook _book = workbook as HSSFWorkbook;
+                _book.DocumentSummaryInformation = dsi;
 
                 SummaryInformation si = PropertySetFactory.CreateSummaryInformation();
                 si.Author = "Jack"; //填加xls文件作者信息
@@ -55,20 +65,20 @@ namespace ExcelCtr
                 si.Title = "Jack导出的excel"; //填加xls文件标题信息
                 si.Subject = "Jack导出的excel"; //填加文件主题信息
                 si.CreateDateTime = DateTime.Now;
-                workbook.SummaryInformation = si;
+                _book.SummaryInformation = si;
             }
 
             #endregion
 
-            HSSFCellStyle dateStyle = workbook.CreateCellStyle() as HSSFCellStyle;
-            HSSFDataFormat format = workbook.CreateDataFormat() as HSSFDataFormat;
+            ICellStyle dateStyle = workbook.CreateCellStyle();
+            IDataFormat format = workbook.CreateDataFormat();
             dateStyle.DataFormat = format.GetFormat("yyyy-MM-dd HH:mm:ss.fff");
             for (int i = 0; i < ds.Tables.Count; i++)
             {
                 #region 填充单个sheet
 
                 int contentRowStartIndex = 0;//表格内容的内容数据起始行,用于合并同列多行之间的合并
-                sheet = workbook.CreateSheet(ds.Tables[i].TableName.StartsWith("Table") ? "Sheet" + (i + 1).ToString() : ds.Tables[i].TableName) as HSSFSheet;
+                sheet = workbook.CreateSheet(ds.Tables[i].TableName.StartsWith("Table") ? "Sheet" + (i + 1).ToString() : ds.Tables[i].TableName);
                 sheet.DefaultRowHeight = 22 * 20;
                 DataTable dtSource = ds.Tables[i];
                 //取得列宽
@@ -105,25 +115,28 @@ namespace ExcelCtr
                         {
                             if (!string.IsNullOrWhiteSpace(strHeaderTexts[i]))
                             {
-                                HSSFRow headerRow = sheet.CreateRow(0) as HSSFRow;
+                                IRow headerRow = sheet.CreateRow(0);
                                 headerRow.HeightInPoints = 25;
                                 ICell cell = headerRow.CreateCell(0);
                                 ICellStyle cellStyle = workbook.CreateCellStyle();
                                 cellStyle.WrapText = true;
                                 cell.CellStyle = cellStyle;
-                                cell.SetCellValue(new HSSFRichTextString(strHeaderTexts[i]));
-
-                                HSSFCellStyle headStyle = workbook.CreateCellStyle() as HSSFCellStyle;
+                                IRichTextString text = new HSSFRichTextString(strHeaderTexts[i]);
+                                if (enumExcelType == EnumExcelType.openxml)
+                                {
+                                    text = new XSSFRichTextString(strHeaderTexts[i]);
+                                }
+                                cell.SetCellValue(text);
+                                ICellStyle headStyle = workbook.CreateCellStyle();
                                 headStyle.Alignment = NPOI.SS.UserModel.HorizontalAlignment.Center;
-                                HSSFFont font = workbook.CreateFont() as HSSFFont;
+                                IFont font = workbook.CreateFont();
                                 font.FontHeightInPoints = 15;
                                 font.Boldweight = 700;
                                 headStyle.SetFont(font);
 
                                 headerRow.GetCell(0).CellStyle = headStyle;
-                                sheet.AddMergedRegion(new Region(0, 0, 0, dtSource.Columns.Count - 1));
+                                sheet.AddMergedRegion(new CellRangeAddress(0, 0, 0, dtSource.Columns.Count - 1));
                                 rowIndex++;
-                                //headerRow.Dispose();
                             }
                         }
 
@@ -132,13 +145,13 @@ namespace ExcelCtr
                         #region 列头及样式
 
                         {
-                            HSSFRow headerRow = sheet.CreateRow(rowIndex) as HSSFRow;
-                            HSSFCellStyle headStyle = workbook.CreateCellStyle() as HSSFCellStyle;
+                            IRow headerRow = sheet.CreateRow(rowIndex);
+                            ICellStyle headStyle = workbook.CreateCellStyle() as ICellStyle;
                             headStyle.Alignment = NPOI.SS.UserModel.HorizontalAlignment.Center;
                             headStyle.VerticalAlignment = NPOI.SS.UserModel.VerticalAlignment.Center;
                             headStyle.WrapText = true;
                             headerRow.HeightInPoints = 23;
-                            HSSFFont font = workbook.CreateFont() as HSSFFont;
+                            IFont font = workbook.CreateFont();
                             font.FontHeightInPoints = 11;
                             font.Boldweight = 700;
                             headStyle.SetFont(font);
@@ -148,7 +161,12 @@ namespace ExcelCtr
                             {
                                 ICell cell = headerRow.CreateCell(column.Ordinal);
                                 cell.CellStyle = headStyle;
-                                cell.SetCellValue(new HSSFRichTextString(column.ColumnName));
+                                IRichTextString text = new HSSFRichTextString(column.ColumnName);
+                                if (enumExcelType == EnumExcelType.openxml)
+                                {
+                                    text = new XSSFRichTextString(column.ColumnName);
+                                }
+                                cell.SetCellValue(text);
 
                                 //设置列宽，这里我多加了10个字符的长度
                                 sheet.SetColumnWidth(column.Ordinal, (arrColWidth[column.Ordinal] + 10) * 256);
@@ -156,7 +174,6 @@ namespace ExcelCtr
 
                             rowIndex++;
                             contentRowStartIndex = rowIndex;//记住数据内容的起始行
-                            //headerRow.Dispose();
                         }
 
                         #endregion
@@ -166,11 +183,11 @@ namespace ExcelCtr
                     #endregion
 
                     #region 填充内容
-                    HSSFRow dataRow = sheet.CreateRow(rowIndex) as HSSFRow;
+                    IRow dataRow = sheet.CreateRow(rowIndex);
                     dataRow.HeightInPoints = 22;
                     foreach (DataColumn column in dtSource.Columns)
                     {
-                        HSSFCell newCell = dataRow.CreateCell(column.Ordinal) as HSSFCell;
+                        ICell newCell = dataRow.CreateCell(column.Ordinal);
 
                         string drValue = row[column].ToString();
 
@@ -179,7 +196,12 @@ namespace ExcelCtr
                             case "System.String": //字符串类型
                                 newCell.CellStyle = cellStyle_crlf;
                                 newCell.SetCellType(CellType.String);
-                                newCell.SetCellValue(new HSSFRichTextString(drValue));
+                                IRichTextString text = new HSSFRichTextString(drValue);
+                                if (enumExcelType == EnumExcelType.openxml)
+                                {
+                                    text = new XSSFRichTextString(drValue);
+                                }
+                                newCell.SetCellValue(text);
                                 break;
 
                             case "System.DateTime": //日期类型
@@ -257,7 +279,7 @@ namespace ExcelCtr
                                 //如果发生不相等的情况则满足合并条件(最少是2行)就会合并
                                 if (en.startIndex + 1 < j)
                                 {
-                                    sheet.AddMergedRegion(new Region(en.startIndex, cloIndex, j - 1, cloIndex));
+                                    sheet.AddMergedRegion(new CellRangeAddress(en.startIndex, j - 1, cloIndex, cloIndex));
                                     ICell cell = sheet.GetRow(en.startIndex).Cells[cloIndex];
                                     ICellStyle cellstyle = workbook.CreateCellStyle();//设置垂直居中格式
                                     cellstyle.VerticalAlignment = VerticalAlignment.Center;//垂直居中
@@ -271,7 +293,7 @@ namespace ExcelCtr
                                 //如果相等了,再判断是不是最后一行,如果是最后一行也要合并
                                 if (j == rowIndex - 1)
                                 {
-                                    sheet.AddMergedRegion(new Region(en.startIndex, cloIndex, j, cloIndex));
+                                    sheet.AddMergedRegion(new CellRangeAddress(en.startIndex, j, cloIndex, cloIndex));
                                     ICell cell = sheet.GetRow(en.startIndex).Cells[cloIndex];
                                     ICellStyle cellstyle = workbook.CreateCellStyle();//设置垂直居中格式
                                     cellstyle.VerticalAlignment = VerticalAlignment.Center;//垂直居中
@@ -288,7 +310,14 @@ namespace ExcelCtr
             }
             using (MemoryStream ms = new MemoryStream())
             {
-                workbook.Write(ms);
+                if (workbook is HSSFWorkbook)
+                {
+                    workbook.Write(ms);
+                }
+                else
+                {
+                    (workbook as XSSFWorkbook).Write(ms, true);
+                }
                 ms.Flush();
                 ms.Position = 0;
                 return ms;
@@ -321,6 +350,7 @@ namespace ExcelCtr
             for (int i = 0; i < wb.NumberOfSheets; i++)
             {
                 ISheet sheet = wb.GetSheetAt(i);
+                if (sheet.LastRowNum == 0) continue;
                 dt = ImportDt(sheet, 0);
                 dt.TableName = sheet.SheetName;
                 ds.Tables.Add(dt);
@@ -357,6 +387,7 @@ namespace ExcelCtr
                 ISheet sheet = wb.GetSheet(sheetNames[i]);
                 if (sheet != null)
                 {
+                    if (sheet.LastRowNum == 0) continue;
                     dt = ImportDt(sheet, indexOfColNames.Count > i ? indexOfColNames[i] : 0);
                     dt.TableName = sheet.SheetName;
                     ds.Tables.Add(dt);
@@ -394,6 +425,7 @@ namespace ExcelCtr
                 ISheet sheet = wb.GetSheetAt(sheetIndexs[i]);
                 if (sheet != null)
                 {
+                    if (sheet.LastRowNum == 0) continue;
                     dt = ImportDt(sheet, indexOfColNames.Count > i ? indexOfColNames[i] : 0);
                     dt.TableName = sheet.SheetName;
                     ds.Tables.Add(dt);
@@ -419,6 +451,7 @@ namespace ExcelCtr
                 ISheet sheet = wb.GetSheetAt(sheetIndexs[i]);
                 if (sheet != null)
                 {
+                    if (sheet.LastRowNum == 0) continue;
                     if (hasColNames[i])
                     {
                         dt = ImportDt(sheet, dataStartIndex[i][0]);
@@ -435,7 +468,7 @@ namespace ExcelCtr
         }
 
         /// <summary>从指定流中读取excel中指定表是否有列头行,和列投行的位置或者数据内容的起始行索引和列索引</summary>
-        /// <param name="filePath">文件路径</param>
+        /// <param name="strFileName">文件名称</param>
         /// <param name="sheetIndexs">sheet索引集合</param>
         /// <param name="hasColNames">每个sheet是否列头行的布尔说明</param>
         /// <param name="dataStartIndex">每个sheet的列头行号或者是数据内容起始的起始行索引或者是起始列索引</param>
@@ -465,6 +498,7 @@ namespace ExcelCtr
                 ISheet sheet = wb.GetSheet(sheetNames[i]);
                 if (sheet != null)
                 {
+                    if (sheet.LastRowNum == 0) continue;
                     if (hasColNames[i])
                     {
                         dt = ImportDt(sheet, dataStartIndex[i][0]);
@@ -481,7 +515,7 @@ namespace ExcelCtr
         }
 
         /// <summary>从指定流中读取excel中指定表是否有列头行,和列投行的位置或者数据内容的起始行索引和列索引</summary>
-        /// <param name="filePath">文件路径</param>
+        /// <param name="strFileName">文件名称</param>
         /// <param name="sheetNames">sheet名字集合</param>
         /// <param name="hasColNames">每个sheet是否列头行的布尔说明</param>
         /// <param name="dataStartIndex">每个sheet的列头行号或者是数据内容起始的起始行索引或者是起始列索引</param>
@@ -503,152 +537,145 @@ namespace ExcelCtr
             DataTable table = new DataTable();
             IRow headerRow;
             int cellCount;
-            try
+            #region 生成列名
+            //其他行为首行的时候
+            headerRow = sheet.GetRow(HeaderRowIndex);
+            cellCount = headerRow.LastCellNum;
+
+            for (int i = headerRow.FirstCellNum; i < cellCount; i++)
             {
-                #region 生成列名
-                //其他行为首行的时候
-                headerRow = sheet.GetRow(HeaderRowIndex);
-                cellCount = headerRow.LastCellNum;
-
-                for (int i = headerRow.FirstCellNum; i < cellCount; i++)
+                //遍历这一行的单元格的起始索引和结束索引
+                if (headerRow.GetCell(i) == null)
                 {
-                    //遍历这一行的单元格的起始索引和结束索引
-                    if (headerRow.GetCell(i) == null)
+                    //如果单元格的内容为空,首选(i,i为列索引)生成列名后插入,重复的时候再以(重复列名i,i为列索引)生成列名后插入
+                    if (table.Columns.IndexOf(Convert.ToString(i)) > 0)
                     {
-                        //如果单元格的内容为空,首选(i,i为列索引)生成列名后插入,重复的时候再以(重复列名i,i为列索引)生成列名后插入
-                        if (table.Columns.IndexOf(Convert.ToString(i)) > 0)
-                        {
-                            DataColumn column = new DataColumn(Convert.ToString("重复列名" + i));
-                            table.Columns.Add(column);
-                        }
-                        else
-                        {
-                            DataColumn column = new DataColumn(Convert.ToString(i));
-                            table.Columns.Add(column);
-                        }
-
-                    }
-                    else if (table.Columns.IndexOf(headerRow.GetCell(i).ToString()) > 0)
-                    {
-                        //如果出现重复列名,就以(重复列名i,i为索引)格式生成列名后插入
                         DataColumn column = new DataColumn(Convert.ToString("重复列名" + i));
                         table.Columns.Add(column);
                     }
                     else
                     {
-                        //一般情况下的直接生成列名后插入到table
-                        DataColumn column = new DataColumn(headerRow.GetCell(i).ToString());
+                        DataColumn column = new DataColumn(Convert.ToString(i));
                         table.Columns.Add(column);
                     }
+
                 }
-                #endregion
-
-                #region 生成数据
-                int rowCount = sheet.LastRowNum;
-                for (int i = (HeaderRowIndex + 1); i <= sheet.LastRowNum; i++)
+                else if (table.Columns.IndexOf(headerRow.GetCell(i).ToString()) > 0)
                 {
-                    try
+                    //如果出现重复列名,就以(重复列名i,i为索引)格式生成列名后插入
+                    DataColumn column = new DataColumn(Convert.ToString("重复列名" + i));
+                    table.Columns.Add(column);
+                }
+                else
+                {
+                    //一般情况下的直接生成列名后插入到table
+                    DataColumn column = new DataColumn(headerRow.GetCell(i).ToString());
+                    table.Columns.Add(column);
+                }
+            }
+            #endregion
+
+            #region 生成数据
+            int rowCount = sheet.LastRowNum;
+            for (int i = (HeaderRowIndex + 1); i <= sheet.LastRowNum; i++)
+            {
+                try
+                {
+                    IRow row;
+                    if (sheet.GetRow(i) == null)
                     {
-                        IRow row;
-                        if (sheet.GetRow(i) == null)
-                        {
-                            row = sheet.CreateRow(i);
-                        }
-                        else
-                        {
-                            row = sheet.GetRow(i);
-                        }
+                        row = sheet.CreateRow(i);
+                    }
+                    else
+                    {
+                        row = sheet.GetRow(i);
+                    }
 
-                        DataRow dataRow = table.NewRow();
+                    DataRow dataRow = table.NewRow();
 
-                        for (int j = row.FirstCellNum; j <= cellCount; j++)
+                    for (int j = row.FirstCellNum; j <= cellCount; j++)
+                    {
+                        try
                         {
-                            try
+                            if (row.GetCell(j) != null)
                             {
-                                if (row.GetCell(j) != null)
+                                switch (row.GetCell(j).CellType)
                                 {
-                                    switch (row.GetCell(j).CellType)
-                                    {
-                                        case CellType.String:
-                                            string str = row.GetCell(j).StringCellValue;
-                                            if (str != null && str.Length > 0)
-                                            {
-                                                dataRow[j] = str.ToString();
-                                            }
-                                            else
-                                            {
-                                                dataRow[j] = null;
-                                            }
-                                            break;
-                                        case CellType.Numeric:
-                                            if (DateUtil.IsCellDateFormatted(row.GetCell(j)))
-                                            {
-                                                dataRow[j] = DateTime.FromOADate(row.GetCell(j).NumericCellValue).ToString("yyyy-MM-dd HH:mm:ss.fff");
-                                            }
-                                            else
-                                            {
-                                                dataRow[j] = Convert.ToDouble(row.GetCell(j).NumericCellValue);
-                                            }
-                                            break;
-                                        case CellType.Boolean:
-                                            dataRow[j] = Convert.ToString(row.GetCell(j).BooleanCellValue);
-                                            break;
-                                        case CellType.Error:
-                                            dataRow[j] = ErrorEval.GetText(row.GetCell(j).ErrorCellValue);
-                                            break;
-                                        case CellType.Formula:
-                                            switch (row.GetCell(j).CachedFormulaResultType)
-                                            {
-                                                case CellType.String:
-                                                    string strFORMULA = row.GetCell(j).StringCellValue;
-                                                    if (strFORMULA != null && strFORMULA.Length > 0)
-                                                    {
-                                                        dataRow[j] = strFORMULA.ToString();
-                                                    }
-                                                    else
-                                                    {
-                                                        dataRow[j] = null;
-                                                    }
-                                                    break;
-                                                case CellType.Numeric:
-                                                    dataRow[j] = Convert.ToString(row.GetCell(j).NumericCellValue);
-                                                    break;
-                                                case CellType.Boolean:
-                                                    dataRow[j] = Convert.ToString(row.GetCell(j).BooleanCellValue);
-                                                    break;
-                                                case CellType.Error:
-                                                    dataRow[j] = ErrorEval.GetText(row.GetCell(j).ErrorCellValue);
-                                                    break;
-                                                default:
-                                                    dataRow[j] = "";
-                                                    break;
-                                            }
-                                            break;
-                                        default:
-                                            dataRow[j] = "";
-                                            break;
-                                    }
+                                    case CellType.String:
+                                        string str = row.GetCell(j).StringCellValue;
+                                        if (str != null && str.Length > 0)
+                                        {
+                                            dataRow[j] = str.ToString();
+                                        }
+                                        else
+                                        {
+                                            dataRow[j] = null;
+                                        }
+                                        break;
+                                    case CellType.Numeric:
+                                        if (DateUtil.IsCellDateFormatted(row.GetCell(j)))
+                                        {
+                                            dataRow[j] = DateTime.FromOADate(row.GetCell(j).NumericCellValue).ToString("yyyy-MM-dd HH:mm:ss.fff");
+                                        }
+                                        else
+                                        {
+                                            dataRow[j] = Convert.ToDouble(row.GetCell(j).NumericCellValue);
+                                        }
+                                        break;
+                                    case CellType.Boolean:
+                                        dataRow[j] = Convert.ToString(row.GetCell(j).BooleanCellValue);
+                                        break;
+                                    case CellType.Error:
+                                        dataRow[j] = ErrorEval.GetText(row.GetCell(j).ErrorCellValue);
+                                        break;
+                                    case CellType.Formula:
+                                        switch (row.GetCell(j).CachedFormulaResultType)
+                                        {
+                                            case CellType.String:
+                                                string strFORMULA = row.GetCell(j).StringCellValue;
+                                                if (strFORMULA != null && strFORMULA.Length > 0)
+                                                {
+                                                    dataRow[j] = strFORMULA.ToString();
+                                                }
+                                                else
+                                                {
+                                                    dataRow[j] = null;
+                                                }
+                                                break;
+                                            case CellType.Numeric:
+                                                dataRow[j] = Convert.ToString(row.GetCell(j).NumericCellValue);
+                                                break;
+                                            case CellType.Boolean:
+                                                dataRow[j] = Convert.ToString(row.GetCell(j).BooleanCellValue);
+                                                break;
+                                            case CellType.Error:
+                                                dataRow[j] = ErrorEval.GetText(row.GetCell(j).ErrorCellValue);
+                                                break;
+                                            default:
+                                                dataRow[j] = "";
+                                                break;
+                                        }
+                                        break;
+                                    default:
+                                        dataRow[j] = "";
+                                        break;
                                 }
                             }
-                            catch (Exception exception)
-                            {
-                                //wl.WriteLogs(exception.ToString());
-                                throw exception;
-                            }
                         }
-                        table.Rows.Add(dataRow);
+                        catch (Exception exception)
+                        {
+                            //wl.WriteLogs(exception.ToString());
+                            throw exception;
+                        }
                     }
-                    catch (Exception exception)
-                    {
-                        throw exception;
-                    }
+                    table.Rows.Add(dataRow);
                 }
-                #endregion
+                catch (Exception exception)
+                {
+                    throw exception;
+                }
             }
-            catch (Exception exception)
-            {
-                //wl.WriteLogs(exception.ToString());
-            }
+            #endregion
             return table;
         }
 
@@ -660,124 +687,117 @@ namespace ExcelCtr
         public static DataTable ImportDt(ISheet sheet, int dataStartRowIndex, int dataStartColIndex)
         {
             DataTable table = new DataTable();
-            try
+            #region 生成数据
+            int rowCount = sheet.LastRowNum;
+            for (int i = dataStartRowIndex; i <= sheet.LastRowNum; i++)
             {
-                #region 生成数据
-                int rowCount = sheet.LastRowNum;
-                for (int i = dataStartRowIndex; i <= sheet.LastRowNum; i++)
+                try
                 {
-                    try
+                    IRow row;
+
+                    if (sheet.GetRow(i) == null)
                     {
-                        IRow row;
+                        row = sheet.CreateRow(i);
+                    }
+                    else
+                    {
+                        row = sheet.GetRow(i);
+                    }
+                    int cellCount = row.LastCellNum;
+                    DataRow dataRow = table.NewRow();
+                    //处理没有响应列号的情况,因为没有列名,前面也就没有添加列
+                    if (table.Columns.Count < cellCount)
+                    {
+                        int tmp = table.Columns.Count;
+                        for (int t = 0; t < cellCount - tmp; t++)
+                        {
+                            table.Columns.Add(new DataColumn());
+                        }
+                    }
 
-                        if (sheet.GetRow(i) == null)
+                    for (int j = row.FirstCellNum; j <= cellCount; j++)
+                    {
+                        try
                         {
-                            row = sheet.CreateRow(i);
-                        }
-                        else
-                        {
-                            row = sheet.GetRow(i);
-                        }
-                        int cellCount = row.LastCellNum;
-                        DataRow dataRow = table.NewRow();
-                        //处理没有响应列号的情况,因为没有列名,前面也就没有添加列
-                        if (table.Columns.Count < cellCount)
-                        {
-                            int tmp = table.Columns.Count;
-                            for (int t = 0; t < cellCount - tmp; t++)
+                            if (row.GetCell(j) != null)
                             {
-                                table.Columns.Add(new DataColumn());
-                            }
-                        }
-
-                        for (int j = row.FirstCellNum; j <= cellCount; j++)
-                        {
-                            try
-                            {
-                                if (row.GetCell(j) != null)
+                                switch (row.GetCell(j).CellType)
                                 {
-                                    switch (row.GetCell(j).CellType)
-                                    {
-                                        case CellType.String:
-                                            string str = row.GetCell(j).StringCellValue;
-                                            if (str != null && str.Length > 0)
-                                            {
-                                                dataRow[j] = str.ToString();
-                                            }
-                                            else
-                                            {
-                                                dataRow[j] = null;
-                                            }
-                                            break;
-                                        case CellType.Numeric:
-                                            if (DateUtil.IsCellDateFormatted(row.GetCell(j)))
-                                            {
-                                                dataRow[j] = DateTime.FromOADate(row.GetCell(j).NumericCellValue).ToString("yyyy-MM-dd HH:mm:ss.fff");
-                                            }
-                                            else
-                                            {
-                                                dataRow[j] = Convert.ToDouble(row.GetCell(j).NumericCellValue);
-                                            }
-                                            break;
-                                        case CellType.Boolean:
-                                            dataRow[j] = Convert.ToString(row.GetCell(j).BooleanCellValue);
-                                            break;
-                                        case CellType.Error:
-                                            dataRow[j] = ErrorEval.GetText(row.GetCell(j).ErrorCellValue);
-                                            break;
-                                        case CellType.Formula:
-                                            switch (row.GetCell(j).CachedFormulaResultType)
-                                            {
-                                                case CellType.String:
-                                                    string strFORMULA = row.GetCell(j).StringCellValue;
-                                                    if (strFORMULA != null && strFORMULA.Length > 0)
-                                                    {
-                                                        dataRow[j] = strFORMULA.ToString();
-                                                    }
-                                                    else
-                                                    {
-                                                        dataRow[j] = null;
-                                                    }
-                                                    break;
-                                                case CellType.Numeric:
-                                                    dataRow[j] = Convert.ToString(row.GetCell(j).NumericCellValue);
-                                                    break;
-                                                case CellType.Boolean:
-                                                    dataRow[j] = Convert.ToString(row.GetCell(j).BooleanCellValue);
-                                                    break;
-                                                case CellType.Error:
-                                                    dataRow[j] = ErrorEval.GetText(row.GetCell(j).ErrorCellValue);
-                                                    break;
-                                                default:
-                                                    dataRow[j] = "";
-                                                    break;
-                                            }
-                                            break;
-                                        default:
-                                            dataRow[j] = "";
-                                            break;
-                                    }
+                                    case CellType.String:
+                                        string str = row.GetCell(j).StringCellValue;
+                                        if (str != null && str.Length > 0)
+                                        {
+                                            dataRow[j] = str.ToString();
+                                        }
+                                        else
+                                        {
+                                            dataRow[j] = null;
+                                        }
+                                        break;
+                                    case CellType.Numeric:
+                                        if (DateUtil.IsCellDateFormatted(row.GetCell(j)))
+                                        {
+                                            dataRow[j] = DateTime.FromOADate(row.GetCell(j).NumericCellValue).ToString("yyyy-MM-dd HH:mm:ss.fff");
+                                        }
+                                        else
+                                        {
+                                            dataRow[j] = Convert.ToDouble(row.GetCell(j).NumericCellValue);
+                                        }
+                                        break;
+                                    case CellType.Boolean:
+                                        dataRow[j] = Convert.ToString(row.GetCell(j).BooleanCellValue);
+                                        break;
+                                    case CellType.Error:
+                                        dataRow[j] = ErrorEval.GetText(row.GetCell(j).ErrorCellValue);
+                                        break;
+                                    case CellType.Formula:
+                                        switch (row.GetCell(j).CachedFormulaResultType)
+                                        {
+                                            case CellType.String:
+                                                string strFORMULA = row.GetCell(j).StringCellValue;
+                                                if (strFORMULA != null && strFORMULA.Length > 0)
+                                                {
+                                                    dataRow[j] = strFORMULA.ToString();
+                                                }
+                                                else
+                                                {
+                                                    dataRow[j] = null;
+                                                }
+                                                break;
+                                            case CellType.Numeric:
+                                                dataRow[j] = Convert.ToString(row.GetCell(j).NumericCellValue);
+                                                break;
+                                            case CellType.Boolean:
+                                                dataRow[j] = Convert.ToString(row.GetCell(j).BooleanCellValue);
+                                                break;
+                                            case CellType.Error:
+                                                dataRow[j] = ErrorEval.GetText(row.GetCell(j).ErrorCellValue);
+                                                break;
+                                            default:
+                                                dataRow[j] = "";
+                                                break;
+                                        }
+                                        break;
+                                    default:
+                                        dataRow[j] = "";
+                                        break;
                                 }
                             }
-                            catch (Exception exception)
-                            {
-                                //wl.WriteLogs(exception.ToString());
-                                throw exception;
-                            }
                         }
-                        table.Rows.Add(dataRow);
+                        catch (Exception exception)
+                        {
+                            //wl.WriteLogs(exception.ToString());
+                            throw exception;
+                        }
                     }
-                    catch (Exception exception)
-                    {
-                        throw exception;
-                    }
+                    table.Rows.Add(dataRow);
                 }
-                #endregion
+                catch (Exception exception)
+                {
+                    throw exception;
+                }
             }
-            catch (Exception exception)
-            {
-                //wl.WriteLogs(exception.ToString());
-            }
+            #endregion
             return table;
         }
 
@@ -864,7 +884,7 @@ namespace ExcelCtr
         /// <param name="sheet">要插入行的sheet</param>
         /// <param name="startindex">从这一行的前面插入(这一行开始包括这一行都会被整体向下移动rowcount)</param>
         /// <param name="rowcount">插入的行数</param>
-        /// <param name="stylerow">被插入行采用的样式行的索引,注意这个索引行所在的位置应该位于插入起始行之上</param>
+        /// <param name="styleindex">被插入行采用的样式行的索引,注意这个索引行所在的位置应该位于插入起始行之上</param>
         public static void InsertRow(ISheet sheet, int startindex, int rowcount, int styleindex)
         {
             IRow stylerow = sheet.GetRow(styleindex);
@@ -905,7 +925,36 @@ namespace ExcelCtr
 
                     targetCell.CellStyle = sourceCell.CellStyle;
                     targetCell.SetCellType(sourceCell.CellType);
-                    if (sourceCell.IsMergedCell)
+                    bool ismerge = false;
+                    if (sheet is XSSFSheet)
+                    {
+                        FieldInfo finfo = typeof(XSSFSheet).GetField("worksheet", BindingFlags.Instance | BindingFlags.NonPublic);
+                        CT_Worksheet ct_sheet = finfo.GetValue(sheet) as NPOI.OpenXmlFormats.Spreadsheet.CT_Worksheet;
+                        if (ct_sheet.mergeCells == null || ct_sheet.mergeCells.mergeCell == null)
+                            ismerge = false;
+                        CellRangeAddress mergedRegion = new CellRangeAddress(sourceCell.RowIndex, sourceCell.RowIndex, sourceCell.ColumnIndex, sourceCell.ColumnIndex);
+                        foreach (CT_MergeCell mc in ct_sheet.mergeCells.mergeCell)
+                        {
+                            if (mc == null) continue;
+                            if (!string.IsNullOrEmpty(mc.@ref))
+                            {
+                                CellRangeAddress range = CellRangeAddress.ValueOf(mc.@ref);
+                                if (range.FirstColumn <= mergedRegion.FirstColumn
+                                 && range.LastColumn >= mergedRegion.LastColumn
+                                 && range.FirstRow <= mergedRegion.FirstRow
+                                 && range.LastRow >= mergedRegion.LastRow)
+                                {
+                                    ismerge = true;
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        ismerge = sourceCell.IsMergedCell;
+                    }
+
+                    if (ismerge)
                     {
                         if (mergeindex > 0 && m + 1 < stylerow.LastCellNum)
                         {
@@ -953,12 +1002,30 @@ namespace ExcelCtr
         }
     }
 
-    //用于合并垂直单元格时的实体类
-    public class Entry
+    /// <summary>
+    /// 用于合并垂直单元格时的实体类
+    /// </summary>
+    internal class Entry
     {
         //记录下当前正在合并的值
         public string combineValue { set; get; }
         //记录下当前合并的起点索引
         public int startIndex { set; get; }
+    }
+
+    /// <summary>
+    /// excel文件格式
+    /// </summary>
+    public enum EnumExcelType
+    {
+        /// <summary>
+        /// 微软97-2003格式,存储为二进制
+        /// </summary>
+        office2003,
+
+        /// <summary>
+        /// openxml标准格式,存储的是一系列xml等文件的压缩包
+        /// </summary>
+        openxml
     }
 }
