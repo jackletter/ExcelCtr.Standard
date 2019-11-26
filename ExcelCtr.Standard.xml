@@ -321,6 +321,9 @@
         <member name="M:ExcelCtr.ExcelTemplateOP.Write(System.String)">
             <summary>
             将结果写入excel文件
+            <para>
+            注意：xlsx格式的模板中输出图片可能会发生变形,将excel模板的默认字体改为Calibri 11pt即可(或者使用xls输出)
+            </para>
             </summary>
             <param name="destfilepath">生成的excel文件路径</param>
         </member>
