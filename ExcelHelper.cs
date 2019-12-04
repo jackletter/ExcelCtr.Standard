@@ -906,101 +906,27 @@ namespace ExcelCtr
                 targetRow.HeightInPoints = stylerow.HeightInPoints;
                 targetRow.ZeroHeight = stylerow.ZeroHeight;
 
-                int mergeindex = -1;
                 for (int m = stylerow.FirstCellNum; m < stylerow.LastCellNum; m++)
                 {
                     sourceCell = stylerow.GetCell(m);
-                    if (sourceCell == null)
-                    {
-                        if (mergeindex > 0)
-                        {
-                            sheet.AddMergedRegion(new NPOI.SS.Util.CellRangeAddress(i, i, mergeindex, m));
-                            mergeindex = -1;
-                        }
-                        continue;
-                    }
-
-
                     targetCell = targetRow.CreateCell(m);
 
                     targetCell.CellStyle = sourceCell.CellStyle;
-                    targetCell.SetCellType(sourceCell.CellType);
-                    bool ismerge = false;
-                    if (sheet is XSSFSheet)
-                    {
-                        FieldInfo finfo = typeof(XSSFSheet).GetField("worksheet", BindingFlags.Instance | BindingFlags.NonPublic);
-                        CT_Worksheet ct_sheet = finfo.GetValue(sheet) as NPOI.OpenXmlFormats.Spreadsheet.CT_Worksheet;
-                        if (ct_sheet.mergeCells == null || ct_sheet.mergeCells.mergeCell == null)
-                        {
-                            ismerge = false;
-                        }
-                        else
-                        {
-                            CellRangeAddress mergedRegion = new CellRangeAddress(sourceCell.RowIndex, sourceCell.RowIndex, sourceCell.ColumnIndex, sourceCell.ColumnIndex);
-                            foreach (CT_MergeCell mc in ct_sheet.mergeCells.mergeCell)
-                            {
-                                if (mc == null) continue;
-                                if (!string.IsNullOrEmpty(mc.@ref))
-                                {
-                                    CellRangeAddress range = CellRangeAddress.ValueOf(mc.@ref);
-                                    if (range.FirstColumn <= mergedRegion.FirstColumn
-                                     && range.LastColumn >= mergedRegion.LastColumn
-                                     && range.FirstRow <= mergedRegion.FirstRow
-                                     && range.LastRow >= mergedRegion.LastRow)
-                                    {
-                                        ismerge = true;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    else
-                    {
-                        ismerge = sourceCell.IsMergedCell;
-                    }
-
-                    if (ismerge)
-                    {
-                        if (mergeindex > 0 && m + 1 < stylerow.LastCellNum)
-                        {
-                            continue;
-                        }
-                        else if (mergeindex > 0 && m + 1 == stylerow.LastCellNum)
-                        {
-                            sheet.AddMergedRegion(new NPOI.SS.Util.CellRangeAddress(i, i, mergeindex, m));
-                            mergeindex = -1;
-                        }
-                        else
-                        {
-                            mergeindex = m;
-                        }
-                    }
-                    else
-                    {
-                        if (mergeindex > 0)
-                        {
-                            sheet.AddMergedRegion(new NPOI.SS.Util.CellRangeAddress(i, i, mergeindex, m));
-                            mergeindex = -1;
-                        }
-                    }
                 }
-            }
-
-            IRow firstTargetRow = sheet.GetRow(startindex);
-            ICell firstSourceCell = null;
-            ICell firstTargetCell = null;
-            if (rowcount > 0)
-            {
-                //新添加的行应用样式
-                for (int m = stylerow.FirstCellNum; m < stylerow.LastCellNum; m++)
+                // If there are are any merged regions in the source row, copy to new row
+                for (int k = 0; k < sheet.NumMergedRegions; k++)
                 {
-                    firstSourceCell = stylerow.GetCell(m);
-                    if (firstSourceCell == null)
-                        continue;
-                    firstTargetCell = firstTargetRow.CreateCell(m);
-
-                    firstTargetCell.CellStyle = firstSourceCell.CellStyle;
-                    firstTargetCell.SetCellType(firstSourceCell.CellType);
+                    CellRangeAddress cellRangeAddress = sheet.GetMergedRegion(k);
+                    if (cellRangeAddress.FirstRow == stylerow.RowNum)
+                    {
+                        CellRangeAddress newCellRangeAddress = new CellRangeAddress(targetRow.RowNum,
+                                                                                    (targetRow.RowNum +
+                                                                                     (cellRangeAddress.FirstRow -
+                                                                                      cellRangeAddress.LastRow)),
+                                                                                    cellRangeAddress.FirstColumn,
+                                                                                    cellRangeAddress.LastColumn);
+                        sheet.AddMergedRegion(newCellRangeAddress);
+                    }
                 }
             }
             #endregion
