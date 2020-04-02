@@ -864,11 +864,9 @@ namespace ExcelCtr
                                                 if (curdt.Rows.Count > 1)//数据记录数大于1时才进行合并
                                                 {
                                                     int curindex = cyclestartrow_index;//拿到循环行的起始行索引
-                                                    //string val = (ExcelHelper.GetCellValue(isheet.GetRow(curindex).GetCell(GetColIndex(arr[0]))) ?? "").ToString();
                                                     string val = curdt.Rows[0][arr[2]].ToString();//拿到合并控制键对应的数据值
                                                     for (int i = 1; i < curdt.Rows.Count; i++)
                                                     {
-                                                        //string realval = (ExcelHelper.GetCellValue(isheet.GetRow(cyclestartrow_index + i).GetCell(GetColIndex(arr[0]))) ?? "").ToString();
                                                         string realval = curdt.Rows[i][arr[2]].ToString();//拿到当前行合并控制键对应的数据值
                                                         if (realval == val)
                                                         {
@@ -876,14 +874,14 @@ namespace ExcelCtr
                                                             if (i == curdt.Rows.Count - 1)
                                                             {
                                                                 //最后一行一定要参与合并
-                                                                isheet.AddMergedRegion(new NPOI.SS.Util.CellRangeAddress(curindex, cyclestartrow_index + i, GetColIndex(arr[0]), GetColIndex(arr[0])));
+                                                                AddMergedRegion(isheet, curindex, cyclestartrow_index + i, GetColIndex(arr[0]), GetColIndex(arr[0]));
                                                             }
                                                         }
                                                         else
                                                         {
                                                             //匹配未成功
                                                             //如果之前处在匹配成功的状态里,那么进行合并操作
-                                                            isheet.AddMergedRegion(new NPOI.SS.Util.CellRangeAddress(curindex, cyclestartrow_index + i - 1, GetColIndex(arr[0]), GetColIndex(arr[0])));
+                                                            AddMergedRegion(isheet,curindex, cyclestartrow_index + i - 1, GetColIndex(arr[0]), GetColIndex(arr[0]));
                                                             val = realval;
                                                             curindex = cyclestartrow_index + i;
                                                         }
@@ -1192,6 +1190,79 @@ namespace ExcelCtr
                 res += (int)((int)ht_colmap[arr[i]] * Math.Pow(26, arr.Length - 1 - i));
             }
             return res - 1;
+        }
+
+        /// <summary>
+        /// 合并单元格,合并之前先检查每个单元格是否已经是合并的了,如果是就先拆分
+        /// </summary>
+        /// <param name="isheet">sheet对象</param>
+        /// <param name="firstRow">起始单元格的行号</param>
+        /// <param name="lastRow">末尾单元格的行号</param>
+        /// <param name="firstCol">起始单元格的列号</param>
+        /// <param name="lastCol">末尾单元格的列号</param>
+        /// <returns></returns>
+        private int AddMergedRegion(ISheet isheet, int firstRow, int lastRow, int firstCol, int lastCol)
+        {
+            var firstRowIndex = firstRow;
+            var lastRowIndex = lastRow;
+            var firstColIndex = firstCol;
+            var lastColIndex = lastCol;
+            for (int i = firstRow; i <= lastRow; i++)
+            {
+                for (int j = firstCol; j <= lastCol; j++)
+                {
+                    var cell = isheet.GetRow(i).GetCell(j);
+                    if (cell.IsMergedCell)
+                    {
+                        //拆分这个单元格
+                        var range = SpliteCell(isheet, cell);
+                        firstRowIndex = Math.Min(firstRowIndex, range.FirstRow);
+                        lastRowIndex = Math.Max(lastRowIndex, range.LastRow);
+                        firstColIndex = Math.Min(firstColIndex, range.FirstColumn);
+                        lastColIndex = Math.Max(lastColIndex, range.LastColumn);
+                    }
+                }
+            }
+            return isheet.AddMergedRegion(new NPOI.SS.Util.CellRangeAddress(firstRowIndex, lastRowIndex, firstColIndex, lastColIndex));
+        }
+
+        /// <summary>
+        /// 拆分单元格,返回这个单元格所在的合并区域
+        /// </summary>
+        /// <param name="isheet">sheet对象</param>
+        /// <param name="cell">要拆分的单元格</param>
+        /// <returns></returns>
+        private CellRangeAddress SpliteCell(ISheet isheet, ICell cell)
+        {
+            var rangeIndex = FindMergedRegion(isheet, cell);
+            if (rangeIndex >= 0)
+            {
+                var range = isheet.GetMergedRegion(rangeIndex);
+                isheet.RemoveMergedRegion(rangeIndex);
+                return range;
+            }
+            else
+            {
+                return new CellRangeAddress(cell.RowIndex, cell.RowIndex, cell.ColumnIndex, cell.ColumnIndex);
+            }
+        }
+
+        /// <summary>
+        /// 找到单元格所在的合并区域索引
+        /// </summary>
+        /// <param name="isheet">sheet对象</param>
+        /// <param name="cell">当前单元格</param>
+        /// <returns></returns>
+        private int FindMergedRegion(ISheet isheet, ICell cell)
+        {
+            var colIndex = cell.ColumnIndex;
+            var rowIndex = cell.RowIndex;
+            int num = isheet.NumMergedRegions;
+            for (int i = 0; i < num; i++)
+            {
+                if (isheet.GetMergedRegion(i).IsInRange(rowIndex, colIndex)) return i;
+            }
+            return -1;
         }
 
         #region 属性
