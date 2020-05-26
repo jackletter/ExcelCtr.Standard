@@ -17,6 +17,7 @@ using System.Drawing;
 using NPOI.SS.Util;
 using NPOI.OpenXmlFormats.Dml;
 using NPOI.OpenXmlFormats.Dml.Diagram;
+using NPOI.HSSF.Record.Aggregates;
 
 namespace ExcelCtr
 {
@@ -671,6 +672,7 @@ namespace ExcelCtr
             //图片格式后缀
             string ext = "";
             string fromvalue = (from.GetAttribute("value") ?? "").ToString().Trim(' ');
+            if (string.IsNullOrWhiteSpace(fromvalue)) fromvalue = ctx.CurrentValue;
             fromvalue = ParseVal(fromvalue);
             List<string> deleteFiles = new List<string>();
 
@@ -724,6 +726,8 @@ namespace ExcelCtr
             {
                 throw new Exception("仅支持二维码或本地图片的插入,请将from节点的model配置项设置为QRCode或File");
             }
+            //如果图片不存在就直接返回
+            if (!File.Exists(filepath)) return;
             #region 将图片插入到excel中
             XmlElement stretch = pic.ChildNodes.OfType<XmlElement>()
                     .Where<XmlElement>(i => i.Name == "stretch")
@@ -777,13 +781,35 @@ namespace ExcelCtr
                 }
             }
             #endregion
+            #region 获取图片位置
             XmlElement start = stretch.ChildNodes.OfType<XmlElement>().Where<XmlElement>(i => i.Name == "start")
-                .FirstOrDefault<XmlElement>();
+                    .FirstOrDefault<XmlElement>();
             if (start == null) throw new Exception("stretch节点下必须存在start节点");
-            int col = GetColIndex(start.GetAttribute("col"));
-            int row = int.Parse(start.GetAttribute("row")) - 1;
-            int offx = int.Parse(start.GetAttribute("offx"));
-            int offy = int.Parse(start.GetAttribute("offy"));
+            //获取起始列
+            var colAttr = start.GetAttribute("col");
+            int col = 0;
+            if (string.IsNullOrWhiteSpace(colAttr))
+            {
+                col = ctx.CurrentColIndex;
+            }
+            else
+            {
+                col = GetColIndex(colAttr);
+            }
+            //获取起始行
+            var rowAttr = start.GetAttribute("row");
+            int row = 0;
+            if (string.IsNullOrWhiteSpace(rowAttr))
+            {
+                row = ctx.CurrentRowIndex;
+            }
+            else
+            {
+                row = int.Parse(rowAttr) - 1;
+            }
+            int offx = int.Parse(start.GetAttribute("offx") ?? "0");
+            int offy = int.Parse(start.GetAttribute("offy") ?? "0");
+            #endregion
             //将图片数据装载到book中
             byte[] bytes = File.ReadAllBytes(filepath);
             int picindex = book.AddPicture(bytes, pictureType);
@@ -834,22 +860,21 @@ namespace ExcelCtr
                 currentrow += int.Parse(index);
             }
 
-            if (model == "single")
-            {
-                #region 单行操作,不涉及到循环行
-                var cols = row.ChildNodes.OfType<XmlElement>()
+            var cols = row.ChildNodes.OfType<XmlElement>()
                     .Where<XmlElement>(i => i.Name == "coltmp")
                     .ToList<XmlElement>();
+            if (model == "single")
+            {
+                //单行操作,不涉及到循环行                
                 cols.ForEach(col => DealCol(col, ctx));
-                #endregion
             }
             else if (model == "cycle")
             {
                 //首先从caldts和parameters中解析出指定的DataTable
                 DataTable curdt = ParseBindDt(row);
+                #region 如果绑定的DataTable中的记录数为0那就删除模板行
                 if (curdt.Rows.Count == 0)
                 {
-                    //如果绑定的DataTable中的记录数为0那就删除模板行
                     if (isheet.LastRowNum >= currentrow + 1)
                     {
                         isheet.ShiftRows(currentrow + 1, isheet.LastRowNum, -1, true, false);
@@ -860,101 +885,75 @@ namespace ExcelCtr
                     }
                     currentrow--;
                 }
-                else
+                #endregion
+                //存储模板列的配置参数,格式:0-索引,1-模板配置值,2-模板合并控制键
+                List<(string index, string value, string mergeKey, string cellType)> coltmps = GetCycleRowColParas(row, ctx);
+                //存储循环行的起始行索引
+                int cyclestartrow_index = currentrow;
+                //根据模板行和记录数插入缺少的行
+                ExcelHelper.InsertRow(isheet, currentrow + 1, curdt.Rows.Count - 1, currentrow);
+                for (int i = 0; i < curdt.Rows.Count; i++)
                 {
-                    //存储模板列的配置参数,格式:0-索引,1-模板配置值,2-模板合并控制键
-                    List<(string index, string value, string mergeKey, string cellType)> coltmps = GetCycleRowColParas(row, ctx);
-                    //存储循环行的起始行索引
-                    int cyclestartrow_index = currentrow;
-                    //根据模板行和记录数插入缺少的行
-                    ExcelHelper.InsertRow(isheet, currentrow + 1, curdt.Rows.Count - 1, currentrow);
-                    for (int i = 0; i < curdt.Rows.Count; i++)
+                    ctx.CurrentRowIndex = currentrow;
+                    //解析当前行
+                    for (int j = 0; j < coltmps.Count; j++)
                     {
-                        //解析当前行
-                        coltmps.ForEach(tupe =>
+                        var tupe = coltmps[j];
+                        var col = cols[j];
+                        string[] arr = new string[] { tupe.index, tupe.value, tupe.mergeKey, tupe.cellType };
+                        string[] res = ParseCycleVal(arr, curdt, i);
+                        ctx.CurrentValue = res[0];
+                        ICell cell = isheet.GetRow(currentrow).GetCell(GetColIndex(arr[0]), MissingCellPolicy.CREATE_NULL_AS_BLANK);
+                        DealCol(col, ctx);
+                        //如果存在控制合并键值,就进行预合并处理
+                        if (arr[2] != "")
                         {
-                            string[] arr = new string[] { tupe.index, tupe.value, tupe.mergeKey, tupe.cellType };
-                            string[] res = ParseCycleVal(arr, curdt, i);
-                            //输出列格式支持数字类型 2018-3-30
-                            ICell cell = isheet.GetRow(currentrow).GetCell(GetColIndex(arr[0]), MissingCellPolicy.CREATE_NULL_AS_BLANK);
-                            if (arr[3] == "number")
+                            //将合并控制键对应的值填充进当前数据表中
+                            if (!curdt.Columns.Contains(arr[2]))
                             {
-                                double d_t;
-                                if (double.TryParse(res[0], out d_t))
-                                {
-                                    cell.SetCellValue(d_t);
-                                }
+                                curdt.Columns.Add(new DataColumn(arr[2]));
                             }
-                            else
-                            {
-                                ICellStyle cellStyle = cell.CellStyle;
-                                if (cellStyle == null)
-                                {
-                                    cell.CellStyle = cellStyle;
-                                    cellStyle = book.CreateCellStyle();
-                                }
-                                cellStyle.WrapText = true;
-                                res[0] = res[0].Replace("\\r", "\r")
-                                                .Replace("\\n", "\n")
-                                                .Replace("\\t", "\t");
-                                IRichTextString text = new HSSFRichTextString(res[0]);
-                                if (book is XSSFWorkbook)
-                                {
-                                    text = new XSSFRichTextString(res[0]);
-                                }
-                                cell.SetCellValue(text);
-                                cell.SetCellValue(text);
-                            }
-                            //如果存在控制合并键值,就进行预合并处理
-                            if (arr[2] != "")
-                            {
-                                //将合并控制键对应的值填充进当前数据表中
-                                if (!curdt.Columns.Contains(arr[2]))
-                                {
-                                    curdt.Columns.Add(new DataColumn(arr[2]));
-                                }
-                                curdt.Rows[i][arr[2]] = res[1];
-                            }
-                        });
-                        //当前行+1
-                        currentrow++;
-                    }
-                    //回到循环行的最后一行
-                    currentrow--;
-                    #region 纵向合并单元格
-                    //数据记录数大于1时才进行合并
-                    if (curdt.Rows.Count <= 1) return;
-                    var combineCols = coltmps.Where(tupe
-                        => tupe.mergeKey != "").ToList();
-                    foreach (var tupe in combineCols)
-                    {
-                        var arr = new string[] { tupe.index, tupe.value, tupe.mergeKey, tupe.cellType };
-                        int curindex = cyclestartrow_index;//拿到循环行的起始行索引
-                        string val = curdt.Rows[0][arr[2]].ToString();//拿到合并控制键对应的数据值
-                        for (int i = 1; i < curdt.Rows.Count; i++)
-                        {
-                            string realval = curdt.Rows[i][arr[2]].ToString();//拿到当前行合并控制键对应的数据值
-                            if (realval == val)
-                            {
-                                //匹配成功
-                                if (i == curdt.Rows.Count - 1)
-                                {
-                                    //最后一行一定要参与合并
-                                    AddMergedRegion(isheet, curindex, cyclestartrow_index + i, GetColIndex(arr[0]), GetColIndex(arr[0]));
-                                }
-                            }
-                            else
-                            {
-                                //匹配未成功
-                                //如果之前处在匹配成功的状态里,那么进行合并操作
-                                AddMergedRegion(isheet, curindex, cyclestartrow_index + i - 1, GetColIndex(arr[0]), GetColIndex(arr[0]));
-                                val = realval;
-                                curindex = cyclestartrow_index + i;
-                            }
+                            curdt.Rows[i][arr[2]] = res[1];
                         }
                     }
-                    #endregion
+                    //当前行+1
+                    currentrow++;
                 }
+                //回到循环行的最后一行
+                currentrow--;
+                #region 纵向合并单元格
+                //数据记录数大于1时才进行合并
+                if (curdt.Rows.Count <= 1) return;
+                var combineCols = coltmps.Where(tupe
+                    => tupe.mergeKey != "").ToList();
+                foreach (var tupe in combineCols)
+                {
+                    var arr = new string[] { tupe.index, tupe.value, tupe.mergeKey, tupe.cellType };
+                    int curindex = cyclestartrow_index;//拿到循环行的起始行索引
+                    string val = curdt.Rows[0][arr[2]].ToString();//拿到合并控制键对应的数据值
+                    for (int i = 1; i < curdt.Rows.Count; i++)
+                    {
+                        string realval = curdt.Rows[i][arr[2]].ToString();//拿到当前行合并控制键对应的数据值
+                        if (realval == val)
+                        {
+                            //匹配成功
+                            if (i == curdt.Rows.Count - 1)
+                            {
+                                //最后一行一定要参与合并
+                                AddMergedRegion(isheet, curindex, cyclestartrow_index + i, GetColIndex(arr[0]), GetColIndex(arr[0]));
+                            }
+                        }
+                        else
+                        {
+                            //匹配未成功
+                            //如果之前处在匹配成功的状态里,那么进行合并操作
+                            AddMergedRegion(isheet, curindex, cyclestartrow_index + i - 1, GetColIndex(arr[0]), GetColIndex(arr[0]));
+                            val = realval;
+                            curindex = cyclestartrow_index + i;
+                        }
+                    }
+                }
+                #endregion
             }
             ctx.CurrentRowIndex = currentrow;
         }
@@ -964,30 +963,44 @@ namespace ExcelCtr
             var book = ctx.Book;
             var isheet = ctx.CurrentSheet;
             var currentrow = ctx.CurrentRowIndex;
-            string colindex = col.GetAttribute("index");
-            string colcelltype = col.GetAttribute("celltype");
-            colindex = (colindex ?? "").Trim(' ');
-            if (string.IsNullOrWhiteSpace(colindex)) throw new Exception("coltmp标签的index属性不能为空!");
-            string colval = col.GetAttribute("value") ?? "";
+            string colindexstr = col.GetAttribute("index");
+            colindexstr = (colindexstr ?? "").Trim(' ');
+            if (string.IsNullOrWhiteSpace(colindexstr)) throw new Exception("coltmp标签的index属性不能为空!");
+            int colIndex = GetColIndex(colindexstr);
+            ctx.CurrentColIndex = colIndex;
             string celltype = col.GetAttribute("type") ?? "";
-            if (colval == "")
-            {
-                colval = isheet.GetRow(currentrow).GetCell(GetColIndex(colindex), MissingCellPolicy.CREATE_NULL_AS_BLANK).StringCellValue ?? "";
-            }
-            if (string.IsNullOrWhiteSpace(colval)) return;
+            #region 解析列值
             //解析列值
-            string res = ParseVal(colval);
+            string colval = ctx.CurrentValue;
+            if (string.IsNullOrWhiteSpace(colval))
+            {
+                colval = col.GetAttribute("value") ?? "";
+                if (colval == "")
+                {
+                    colval = isheet.GetRow(currentrow).GetCell(colIndex, MissingCellPolicy.CREATE_NULL_AS_BLANK).StringCellValue ?? "";
+                }
+                if (string.IsNullOrWhiteSpace(colval)) return;
+                ctx.CurrentValue = colval = ParseVal(colval);
+            }
+            #endregion
+
             if (celltype.ToLower() == "number")
             {
                 double res_double;
-                if (double.TryParse(res, out res_double))
+                if (double.TryParse(colval, out res_double))
                 {
-                    isheet.GetRow(currentrow).GetCell(GetColIndex(colindex), MissingCellPolicy.CREATE_NULL_AS_BLANK).SetCellValue(res_double);
+                    isheet.GetRow(currentrow).GetCell(colIndex, MissingCellPolicy.CREATE_NULL_AS_BLANK).SetCellValue(res_double);
                 }
+            }
+            else if (celltype.ToLower() == "image")
+            {
+                var pic = col.ChildNodes.OfType<XmlElement>().Where(ele => ele.Name == "pic").FirstOrDefault();
+                if (pic == null) throw new Exception("循环行中类型为image的列下必须村存在一个pic节点!");
+                DealPic(pic, ctx);
             }
             else
             {
-                ICell cell = isheet.GetRow(currentrow).GetCell(GetColIndex(colindex), MissingCellPolicy.CREATE_NULL_AS_BLANK);
+                ICell cell = isheet.GetRow(currentrow).GetCell(colIndex, MissingCellPolicy.CREATE_NULL_AS_BLANK);
                 ICellStyle cellStyle = cell.CellStyle;
                 if (cellStyle == null)
                 {
@@ -995,13 +1008,13 @@ namespace ExcelCtr
                     cell.CellStyle = cellStyle;
                 }
                 cellStyle.WrapText = true;
-                res = res.Replace("\\r", "\r")
+                colval = colval.Replace("\\r", "\r")
                     .Replace("\\n", "\n")
                     .Replace("\\t", "\t");
-                IRichTextString text = new HSSFRichTextString(res);
+                IRichTextString text = new HSSFRichTextString(colval);
                 if (book is XSSFWorkbook)
                 {
-                    text = new XSSFRichTextString(res);
+                    text = new XSSFRichTextString(colval);
                 }
                 cell.SetCellValue(text);
             }
@@ -1078,7 +1091,7 @@ namespace ExcelCtr
                 string coltmp_index = coltmp.GetAttribute("index") ?? "";
                 string coltmp_value = coltmp.GetAttribute("value") ?? "";
                 string coltmp_merge = coltmp.GetAttribute("mergekey") ?? "";
-                string coltmp_celltype = coltmp.GetAttribute("celltype") ?? "";
+                string coltmp_celltype = coltmp.GetAttribute("type") ?? coltmp.GetAttribute("celltype") ?? "";
                 //模板列索引不能为空
                 if (coltmp_index == "") throw new Exception("循环行的列模板coltmp标签的属性index不能为空.");
                 //模板列的引用,配置里找不到就去excel对应单元格中去找
@@ -1453,6 +1466,8 @@ namespace ExcelCtr
             public IWorkbook Book { set; get; }
             public ISheet CurrentSheet { set; get; }
             public int CurrentRowIndex { set; get; }
+            public int CurrentColIndex { set; get; }
+            public string CurrentValue { set; get; }
         }
     }
 
