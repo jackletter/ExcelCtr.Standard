@@ -303,20 +303,20 @@
             <summary>
             使用配置文件和哈希表(携带参数)初始化
             </summary>
-            <param name="templateConfPath">配置文件的绝对路径,以.xml结尾如:d:\demo.xml</param>
+            <param name="templateConfPath">配置文件的绝对路径,以.xml结尾 如:d:\demo.xml</param>
             <param name="ht">携带的参数</param>
         </member>
         <member name="M:ExcelCtr.ExcelTemplateOP.PrepareData(System.Collections.Hashtable)">
             <summary>
-            初始化配置文件
+            根据外部参数初始化
             </summary>
-            <param name="ht">初始化配置携带的参数</param>
+            <param name="ht">外部参数</param>
         </member>
         <member name="M:ExcelCtr.ExcelTemplateOP.ReadConf(System.String)">
             <summary>
             读取配置文件
             </summary>
-            <param name="confPath"></param>
+            <param name="confPath">配置文件路径</param>
         </member>
         <member name="M:ExcelCtr.ExcelTemplateOP.Write(System.String)">
             <summary>
