@@ -336,7 +336,7 @@
         </member>
         <member name="M:ExcelCtr.ExcelTemplateOP.ParseCycleVal(System.String[],System.Data.DataTable,System.Int32)">
             <summary>
-            解析循环行配置列的属性value的实际值,以及控制合并的值
+            解析循环行配置列的属性value的实际值,以及控制合并的值,以及alt值
             </summary>
             <param name="curdt">循环行绑定的表</param>
             <param name="arr">模板列的配置数组</param>
@@ -386,6 +386,11 @@
             <param name="isheet">sheet对象</param>
             <param name="cell">当前单元格</param>
             <returns></returns>
+        </member>
+        <member name="P:ExcelCtr.ExcelTemplateOP.DealContext.IsInRowCycle">
+            <summary>
+            是否在循环行中
+            </summary>
         </member>
     </members>
 </doc>

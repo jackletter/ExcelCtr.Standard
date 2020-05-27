@@ -693,32 +693,34 @@ namespace ExcelCtr
             else if (frommodel == "File")
             {
                 #region 本地图片
-                if (!File.Exists(fromvalue)) throw new Exception($"未找到要插入到excel中的图片:{fromvalue}");
-                filepath = fromvalue;
-                ext = Path.GetExtension(fromvalue).ToLower();
-                if (ext == ".png")
+                if (File.Exists(fromvalue))
                 {
-                    pictureType = PictureType.PNG;
-                }
-                else if (ext == ".bmp")
-                {
-                    pictureType = PictureType.BMP;
-                }
-                else if (ext == ".gif")
-                {
-                    pictureType = PictureType.GIF;
-                }
-                else if (ext == ".jpg")
-                {
-                    pictureType = PictureType.JPEG;
-                }
-                else if (ext == ".tiff")
-                {
-                    pictureType = PictureType.TIFF;
-                }
-                else
-                {
-                    throw new Exception($"不支持的图片格式:{fromvalue}");
+                    filepath = fromvalue;
+                    ext = Path.GetExtension(fromvalue).ToLower();
+                    if (ext == ".png")
+                    {
+                        pictureType = PictureType.PNG;
+                    }
+                    else if (ext == ".bmp")
+                    {
+                        pictureType = PictureType.BMP;
+                    }
+                    else if (ext == ".gif")
+                    {
+                        pictureType = PictureType.GIF;
+                    }
+                    else if (ext == ".jpg")
+                    {
+                        pictureType = PictureType.JPEG;
+                    }
+                    else if (ext == ".tiff")
+                    {
+                        pictureType = PictureType.TIFF;
+                    }
+                    else
+                    {
+                        throw new Exception($"不支持的图片格式:{fromvalue}");
+                    }
                 }
                 #endregion
             }
@@ -726,8 +728,14 @@ namespace ExcelCtr
             {
                 throw new Exception("仅支持二维码或本地图片的插入,请将from节点的model配置项设置为QRCode或File");
             }
-            //如果图片不存在就直接返回
-            if (!File.Exists(filepath)) return;
+            #region 如果图片不存在就显示alt
+            if (!File.Exists(filepath))
+            {
+                ctx.CurrentValue = ctx.CurrentAlt;
+                SetCellText(ctx);
+                return;
+            }
+            #endregion
             #region 将图片插入到excel中
             XmlElement stretch = pic.ChildNodes.OfType<XmlElement>()
                     .Where<XmlElement>(i => i.Name == "stretch")
@@ -847,17 +855,16 @@ namespace ExcelCtr
                 || string.IsNullOrWhiteSpace(position)
                 || string.IsNullOrWhiteSpace(index)
                 ) throw new Exception("标签row的属性model,position,index都不能为空");
-            var currentrow = ctx.CurrentRowIndex;
             var isheet = ctx.CurrentSheet;
             var book = ctx.Book;
             //根据定位属性计算出当前应该操作的行索引
             if (position == "absolute")
             {
-                currentrow = int.Parse(index) - 1;
+                ctx.CurrentRowIndex = int.Parse(index) - 1;
             }
             else if (position == "relative")
             {
-                currentrow += int.Parse(index);
+                ctx.CurrentRowIndex += int.Parse(index);
             }
 
             var cols = row.ChildNodes.OfType<XmlElement>()
@@ -865,62 +872,64 @@ namespace ExcelCtr
                     .ToList<XmlElement>();
             if (model == "single")
             {
-                //单行操作,不涉及到循环行                
+                //单行操作,不涉及到循环行 
+                ctx.IsInRowCycle = false;
                 cols.ForEach(col => DealCol(col, ctx));
             }
             else if (model == "cycle")
             {
                 //首先从caldts和parameters中解析出指定的DataTable
                 DataTable curdt = ParseBindDt(row);
+                ctx.IsInRowCycle = true;
                 #region 如果绑定的DataTable中的记录数为0那就删除模板行
                 if (curdt.Rows.Count == 0)
                 {
-                    if (isheet.LastRowNum >= currentrow + 1)
+                    if (isheet.LastRowNum >= ctx.CurrentRowIndex + 1)
                     {
-                        isheet.ShiftRows(currentrow + 1, isheet.LastRowNum, -1, true, false);
+                        isheet.ShiftRows(ctx.CurrentRowIndex + 1, isheet.LastRowNum, -1, true, false);
                     }
                     else
                     {
-                        isheet.RemoveRow(isheet.GetRow(currentrow));
+                        isheet.RemoveRow(isheet.GetRow(ctx.CurrentRowIndex));
                     }
-                    currentrow--;
+                    ctx.CurrentRowIndex--;
                 }
                 #endregion
                 //存储模板列的配置参数,格式:0-索引,1-模板配置值,2-模板合并控制键
-                List<(string index, string value, string mergeKey, string cellType)> coltmps = GetCycleRowColParas(row, ctx);
+                List<(string index, string value, string mergeKey, string cellType, string alt)> coltmps = GetCycleRowColParas(row, ctx);
                 //存储循环行的起始行索引
-                int cyclestartrow_index = currentrow;
+                int cyclestartrow_index = ctx.CurrentRowIndex;
                 //根据模板行和记录数插入缺少的行
-                ExcelHelper.InsertRow(isheet, currentrow + 1, curdt.Rows.Count - 1, currentrow);
+                ExcelHelper.InsertRow(isheet, ctx.CurrentRowIndex + 1, curdt.Rows.Count - 1, ctx.CurrentRowIndex);
                 for (int i = 0; i < curdt.Rows.Count; i++)
                 {
-                    ctx.CurrentRowIndex = currentrow;
                     //解析当前行
                     for (int j = 0; j < coltmps.Count; j++)
                     {
                         var tupe = coltmps[j];
                         var col = cols[j];
-                        string[] arr = new string[] { tupe.index, tupe.value, tupe.mergeKey, tupe.cellType };
+                        string[] arr = new string[] { tupe.index, tupe.value, tupe.mergeKey, tupe.alt, tupe.cellType };
                         string[] res = ParseCycleVal(arr, curdt, i);
                         ctx.CurrentValue = res[0];
-                        ICell cell = isheet.GetRow(currentrow).GetCell(GetColIndex(arr[0]), MissingCellPolicy.CREATE_NULL_AS_BLANK);
+                        ctx.CurrentAlt = res[2];
+                        ICell cell = isheet.GetRow(ctx.CurrentRowIndex).GetCell(GetColIndex(tupe.index), MissingCellPolicy.CREATE_NULL_AS_BLANK);
                         DealCol(col, ctx);
                         //如果存在控制合并键值,就进行预合并处理
-                        if (arr[2] != "")
+                        if (tupe.mergeKey != "")
                         {
                             //将合并控制键对应的值填充进当前数据表中
-                            if (!curdt.Columns.Contains(arr[2]))
+                            if (!curdt.Columns.Contains(tupe.mergeKey))
                             {
-                                curdt.Columns.Add(new DataColumn(arr[2]));
+                                curdt.Columns.Add(new DataColumn(tupe.mergeKey));
                             }
-                            curdt.Rows[i][arr[2]] = res[1];
+                            curdt.Rows[i][tupe.mergeKey] = res[1];
                         }
                     }
                     //当前行+1
-                    currentrow++;
+                    ctx.CurrentRowIndex++;
                 }
                 //回到循环行的最后一行
-                currentrow--;
+                ctx.CurrentRowIndex--;
                 #region 纵向合并单元格
                 //数据记录数大于1时才进行合并
                 if (curdt.Rows.Count <= 1) return;
@@ -955,41 +964,43 @@ namespace ExcelCtr
                 }
                 #endregion
             }
-            ctx.CurrentRowIndex = currentrow;
         }
 
         private void DealCol(XmlElement col, DealContext ctx)
         {
             var book = ctx.Book;
             var isheet = ctx.CurrentSheet;
-            var currentrow = ctx.CurrentRowIndex;
             string colindexstr = col.GetAttribute("index");
             colindexstr = (colindexstr ?? "").Trim(' ');
             if (string.IsNullOrWhiteSpace(colindexstr)) throw new Exception("coltmp标签的index属性不能为空!");
             int colIndex = GetColIndex(colindexstr);
             ctx.CurrentColIndex = colIndex;
             string celltype = col.GetAttribute("type") ?? "";
-            #region 解析列值
-            //解析列值
-            string colval = ctx.CurrentValue;
-            if (string.IsNullOrWhiteSpace(colval))
+            #region 解析列值和alt值           
+            if (!ctx.IsInRowCycle)
             {
-                colval = col.GetAttribute("value") ?? "";
+                var colval = col.GetAttribute("value") ?? "";
                 if (colval == "")
                 {
-                    colval = isheet.GetRow(currentrow).GetCell(colIndex, MissingCellPolicy.CREATE_NULL_AS_BLANK).StringCellValue ?? "";
+                    colval = isheet.GetRow(ctx.CurrentRowIndex).GetCell(colIndex, MissingCellPolicy.CREATE_NULL_AS_BLANK).StringCellValue ?? "";
                 }
-                if (string.IsNullOrWhiteSpace(colval)) return;
                 ctx.CurrentValue = colval = ParseVal(colval);
+
+                string alt = col.GetAttribute("alt") ?? "";
+                if (!string.IsNullOrWhiteSpace(alt))
+                {
+                    alt = ParseVal(alt);
+                }
+                ctx.CurrentAlt = alt;
             }
             #endregion
 
             if (celltype.ToLower() == "number")
             {
                 double res_double;
-                if (double.TryParse(colval, out res_double))
+                if (double.TryParse(ctx.CurrentValue, out res_double))
                 {
-                    isheet.GetRow(currentrow).GetCell(colIndex, MissingCellPolicy.CREATE_NULL_AS_BLANK).SetCellValue(res_double);
+                    isheet.GetRow(ctx.CurrentRowIndex).GetCell(colIndex, MissingCellPolicy.CREATE_NULL_AS_BLANK).SetCellValue(res_double);
                 }
             }
             else if (celltype.ToLower() == "image")
@@ -1000,24 +1011,31 @@ namespace ExcelCtr
             }
             else
             {
-                ICell cell = isheet.GetRow(currentrow).GetCell(colIndex, MissingCellPolicy.CREATE_NULL_AS_BLANK);
-                ICellStyle cellStyle = cell.CellStyle;
-                if (cellStyle == null)
-                {
-                    cellStyle = book.CreateCellStyle();
-                    cell.CellStyle = cellStyle;
-                }
-                cellStyle.WrapText = true;
-                colval = colval.Replace("\\r", "\r")
-                    .Replace("\\n", "\n")
-                    .Replace("\\t", "\t");
-                IRichTextString text = new HSSFRichTextString(colval);
-                if (book is XSSFWorkbook)
-                {
-                    text = new XSSFRichTextString(colval);
-                }
-                cell.SetCellValue(text);
+                SetCellText(ctx);
             }
+        }
+
+        private void SetCellText(DealContext ctx)
+        {
+            var book = ctx.Book;
+            var isheet = ctx.CurrentSheet;
+            ICell cell = isheet.GetRow(ctx.CurrentRowIndex).GetCell(ctx.CurrentColIndex, MissingCellPolicy.CREATE_NULL_AS_BLANK);
+            ICellStyle cellStyle = cell.CellStyle;
+            if (cellStyle == null)
+            {
+                cellStyle = book.CreateCellStyle();
+                cell.CellStyle = cellStyle;
+            }
+            cellStyle.WrapText = true;
+            ctx.CurrentValue = ctx.CurrentValue.Replace("\\r", "\r")
+                .Replace("\\n", "\n")
+                .Replace("\\t", "\t");
+            IRichTextString text = new HSSFRichTextString(ctx.CurrentValue);
+            if (book is XSSFWorkbook)
+            {
+                text = new XSSFRichTextString(ctx.CurrentValue);
+            }
+            cell.SetCellValue(text);
         }
 
         private DataTable ParseBindDt(XmlElement row)
@@ -1078,11 +1096,11 @@ namespace ExcelCtr
             return curdt;
         }
 
-        private List<(string index, string value, string mergeKey, string cellType)> GetCycleRowColParas(XmlElement row, DealContext ctx)
+        private List<(string index, string value, string mergeKey, string cellType, string alt)> GetCycleRowColParas(XmlElement row, DealContext ctx)
         {
             var isheet = ctx.CurrentSheet;
             var currentrow = ctx.CurrentRowIndex;
-            List<(string index, string value, string mergeKey, string cellType)> coltmps = new List<(string index, string value, string mergeKey, string cellType)>();
+            List<(string index, string value, string mergeKey, string cellType, string alt)> coltmps = new List<(string index, string value, string mergeKey, string cellType, string alt)>();
             var cols = row.ChildNodes.OfType<XmlElement>()
                          .Where<XmlElement>(i => i.Name == "coltmp")
                          .ToList<XmlElement>();
@@ -1092,6 +1110,7 @@ namespace ExcelCtr
                 string coltmp_value = coltmp.GetAttribute("value") ?? "";
                 string coltmp_merge = coltmp.GetAttribute("mergekey") ?? "";
                 string coltmp_celltype = coltmp.GetAttribute("type") ?? coltmp.GetAttribute("celltype") ?? "";
+                string coltmp_alt = coltmp.GetAttribute("alt") ?? "";
                 //模板列索引不能为空
                 if (coltmp_index == "") throw new Exception("循环行的列模板coltmp标签的属性index不能为空.");
                 //模板列的引用,配置里找不到就去excel对应单元格中去找
@@ -1102,7 +1121,7 @@ namespace ExcelCtr
                 //模板引用不为空的话就添加存储
                 if (coltmp_value != "")
                 {
-                    coltmps.Add((coltmp_index, coltmp_value, coltmp_merge, coltmp_celltype));
+                    coltmps.Add((coltmp_index, coltmp_value, coltmp_merge, coltmp_celltype, coltmp_alt));
                 }
             }
             return coltmps;
@@ -1167,7 +1186,7 @@ namespace ExcelCtr
 
         #region 解析循环行配置列的属性value的实际值,以及控制合并的值
         /// <summary>
-        /// 解析循环行配置列的属性value的实际值,以及控制合并的值
+        /// 解析循环行配置列的属性value的实际值,以及控制合并的值,以及alt值
         /// </summary>
         /// <param name="curdt">循环行绑定的表</param>
         /// <param name="arr">模板列的配置数组</param>
@@ -1175,9 +1194,9 @@ namespace ExcelCtr
         /// <returns></returns>
         private string[] ParseCycleVal(string[] arr, DataTable curdt, int i)
         {
-            string[] res = new string[2];
+            string[] res = new string[3];
             Regex reg = new Regex(@"#(parameters|calitems|binddt)\.([^#]+)#");
-            for (int ii = 0; ii < 2; ii++)
+            for (int ii = 0; ii < 3; ii++)
             {
                 if (arr[ii + 1] == "")
                 {
@@ -1468,6 +1487,12 @@ namespace ExcelCtr
             public int CurrentRowIndex { set; get; }
             public int CurrentColIndex { set; get; }
             public string CurrentValue { set; get; }
+            public string CurrentAlt { set; get; }
+
+            /// <summary>
+            /// 是否在循环行中
+            /// </summary>
+            public bool IsInRowCycle { set; get; }
         }
     }
 
